@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chord Chain - Ad Lib 練習アプリ</title>
+<style>
+  :root{
+    --bg:#111214;
+    --panel:#1b1c1f;
+    --panel2:#232427;
+    --accent:#ff5a1f;
+    --accent2:#ffb020;
+    --text:#eee;
+    --muted:#8a8a8f;
+    --border:#2e2f33;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Segoe UI",Helvetica,Arial,sans-serif;
+    background:radial-gradient(circle at 20% 0%, #232323 0%, var(--bg) 60%);
+    color:var(--text);
+    min-height:100vh;
+    padding:24px;
+  }
+  .app{
+    max-width:760px;
+    margin:0 auto;
+  }
+  h1{
+    font-size:28px;
+    letter-spacing:2px;
+    margin:0 0 4px;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    font-weight:800;
+  }
+  .subtitle{
+    color:var(--muted);
+    font-size:13px;
+    margin-bottom:24px;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px;
+    margin-bottom:18px;
+  }
+  .panel h2{
+    font-size:14px;
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+    color:var(--accent2);
+    margin:0 0 14px;
+  }
+  .row{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  select, input[type=range]{
+    background:var(--panel2);
+    color:var(--text);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:8px 10px;
+    font-size:14px;
+  }
+  button{
+    background:var(--panel2);
+    color:var(--text);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:9px 16px;
+    font-size:14px;
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  button:hover:not(:disabled){
+    border-color:var(--accent);
+    color:var(--accent2);
+  }
+  button:disabled{
+    opacity:.4;
+    cursor:not-allowed;
+  }
+  #addChordBtn{
+    background:var(--accent);
+    border-color:var(--accent);
+    color:#111;
+    font-weight:700;
+  }
+  #addChordBtn:hover{ filter:brightness(1.1); }
+
+  #progressionList{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-top:16px;
+    min-height:44px;
+  }
+  .chip{
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:8px 10px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-weight:600;
+    font-size:14px;
+  }
+  .chip.playing{
+    border-color:var(--accent);
+    box-shadow:0 0 12px rgba(255,90,31,.5);
+    color:var(--accent2);
+  }
+  .chip .idx{
+    color:var(--muted);
+    font-size:11px;
+    font-weight:400;
+  }
+  .chip button{
+    padding:2px 7px;
+    font-size:12px;
+    line-height:1;
+  }
+  .empty-msg{
+    color:var(--muted);
+    font-size:13px;
+  }
+
+  .transport{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  #playBtn{
+    background:var(--accent);
+    border-color:var(--accent);
+    color:#111;
+    font-weight:700;
+    padding:10px 22px;
+  }
+  #stopBtn{
+    background:#3a1414;
+    border-color:#7a2a2a;
+    color:#ffb3b3;
+  }
+
+  .display{
+    text-align:center;
+    padding:34px 20px;
+    background:linear-gradient(180deg,#1c1d20,#141416);
+    border-radius:14px;
+    border:1px solid var(--border);
+  }
+  #currentChord{
+    font-size:56px;
+    font-weight:800;
+    letter-spacing:2px;
+    color:var(--accent2);
+    text-shadow:0 0 20px rgba(255,176,32,.35);
+    min-height:66px;
+  }
+  #measureIndicator{
+    color:var(--muted);
+    font-size:13px;
+    margin-top:6px;
+  }
+  .tempo-label{
+    font-size:13px;
+    color:var(--muted);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  #tempoValue{
+    color:var(--accent2);
+    font-weight:700;
+    width:36px;
+    display:inline-block;
+  }
+  footer{
+    text-align:center;
+    color:var(--muted);
+    font-size:12px;
+    margin-top:20px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>CHORD CHAIN</h1>
+  <div class="subtitle">Ad Lib 練習用バッキングアプリ &mdash; コード進行を組んで、Keyboard / Bass / Drum のバッキングに合わせてソロを弾こう</div>
+
+  <div class="panel">
+    <h2>1. 曲のキーを設定</h2>
+    <div class="row">
+      <select id="keySelect"></select>
+      <span style="color:var(--muted);font-size:13px;">キーを設定すると、各Rootが度数（ローマ数字）で表示されます</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>2. コード進行を作る</h2>
+    <div class="row">
+      <select id="rootSelect"></select>
+      <select id="qualitySelect"></select>
+      <button id="addChordBtn">＋ 追加</button>
+      <button id="clearBtn">全消去</button>
+    </div>
+    <div id="progressionList"></div>
+  </div>
+
+  <div class="panel">
+    <h2>3. テンポ・音量・再生</h2>
+    <div class="row" style="justify-content:space-between;">
+      <label class="tempo-label">
+        テンポ
+        <input type="range" id="tempoSlider" min="50" max="220" value="100">
+        <span id="tempoValue">100</span> BPM
+      </label>
+      <label class="tempo-label">
+        Volume
+        <input type="range" id="volumeSlider" min="0" max="100" value="80">
+        <span id="volumeValue">80</span>%
+      </label>
+      <div class="transport">
+        <button id="playBtn">▶ 再生（無限ループ）</button>
+        <button id="stopBtn" disabled>■ 停止</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="display">
+    <div id="currentChord">-</div>
+    <div id="measureIndicator">コードを追加して再生を押してください</div>
+  </div>
+
+  <footer>1コード = 1小節。最後まで進んだら自動的に最初の小節へ戻り、停止するまでループします。</footer>
+</div>
+
+<script>
+/* ===================== コード定義 ===================== */
+const ROOTS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const QUALITIES = [
+  { key:'maj',  label:'',     suffix:'',    intervals:[0,4,7]      },
+  { key:'min',  label:'m',    suffix:'m',   intervals:[0,3,7]      },
+  { key:'7',    label:'7',    suffix:'7',   intervals:[0,4,7,10]   },
+  { key:'maj7', label:'M7',   suffix:'M7',  intervals:[0,4,7,11]   },
+  { key:'min7', label:'m7',   suffix:'m7',  intervals:[0,3,7,10]   },
+  { key:'dim',  label:'dim',  suffix:'dim', intervals:[0,3,6]      },
+  { key:'aug',  label:'aug',  suffix:'aug', intervals:[0,4,8]      },
+  { key:'sus4', label:'sus4', suffix:'sus4',intervals:[0,5,7]      },
+];
+
+const rootSelect = document.getElementById('rootSelect');
+const qualitySelect = document.getElementById('qualitySelect');
+QUALITIES.forEach(q => {
+  const opt = document.createElement('option');
+  opt.value = q.key; opt.textContent = q.label ? `${q.label}` : 'major';
+  qualitySelect.appendChild(opt);
+});
+
+/* ===================== キー & 度数（ローマ数字）===================== */
+let songKey = null; // null = 未設定
+
+// キーのルートからの半音差 -> ローマ数字度数（ダイアトニックにない音は♭付き）
+const DEGREE_MAP = {
+  0:'Ⅰ', 1:'♭Ⅱ', 2:'Ⅱ', 3:'♭Ⅲ', 4:'Ⅲ', 5:'Ⅳ',
+  6:'♭Ⅴ', 7:'Ⅴ', 8:'♭Ⅵ', 9:'Ⅵ', 10:'♭Ⅶ', 11:'Ⅶ'
+};
+
+function degreeForRoot(root){
+  const semi = (ROOTS.indexOf(root) - ROOTS.indexOf(songKey) + 12) % 12;
+  return DEGREE_MAP[semi];
+}
+
+// Root表示文字列（キー設定時は "G(Ⅴ)" のように度数を付与）
+function rootWithDegree(root){
+  if(!songKey) return root;
+  return `${root}(${degreeForRoot(root)})`;
+}
+
+function populateRootSelect(){
+  const prevValue = rootSelect.value || ROOTS[0];
+  rootSelect.innerHTML = '';
+  ROOTS.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r;
+    opt.textContent = rootWithDegree(r);
+    rootSelect.appendChild(opt);
+  });
+  rootSelect.value = prevValue;
+}
+populateRootSelect();
+
+const keySelect = document.getElementById('keySelect');
+function populateKeySelect(){
+  const noneOpt = document.createElement('option');
+  noneOpt.value = ''; noneOpt.textContent = '未設定';
+  keySelect.appendChild(noneOpt);
+  ROOTS.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r; opt.textContent = r;
+    keySelect.appendChild(opt);
+  });
+}
+populateKeySelect();
+
+keySelect.onchange = () => {
+  songKey = keySelect.value || null;
+  populateRootSelect();
+  renderProgression(displayedIndex);
+};
+
+/* ===================== 進行データ ===================== */
+let progression = []; // { root, qualityKey }
+let displayedIndex = -1; // 現在ハイライト表示中の小節（再生していない時は -1）
+
+function chordLabel(chord){
+  const q = QUALITIES.find(x => x.key === chord.qualityKey);
+  return rootWithDegree(chord.root) + q.suffix;
+}
+
+function midiForRoot(root, octave){
+  // C4 = 60 (Cが octave 4 のとき)
+  return (octave+1)*12 + ROOTS.indexOf(root);
+}
+
+function chordMidiNotes(chord, octave){
+  const q = QUALITIES.find(x => x.key === chord.qualityKey);
+  const base = midiForRoot(chord.root, octave);
+  return q.intervals.map(iv => base + iv);
+}
+
+function midiToFreq(midi){
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+/* ===================== UI: 進行リスト ===================== */
+const progressionListEl = document.getElementById('progressionList');
+
+function renderProgression(highlightIndex = -1){
+  progressionListEl.innerHTML = '';
+  if(progression.length === 0){
+    const msg = document.createElement('div');
+    msg.className = 'empty-msg';
+    msg.textContent = 'まだコードがありません。上のメニューから追加してください。';
+    progressionListEl.appendChild(msg);
+    return;
+  }
+  progression.forEach((chord, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (i === highlightIndex ? ' playing' : '');
+    chip.innerHTML = `<span class="idx">${i+1}</span><span>${chordLabel(chord)}</span>`;
+    const delBtn = document.createElement('button');
+    delBtn.textContent = '×';
+    delBtn.title = '削除';
+    delBtn.onclick = () => {
+      progression.splice(i, 1);
+      renderProgression();
+    };
+    chip.appendChild(delBtn);
+    progressionListEl.appendChild(chip);
+  });
+}
+renderProgression();
+
+document.getElementById('addChordBtn').onclick = () => {
+  progression.push({ root: rootSelect.value, qualityKey: qualitySelect.value });
+  renderProgression();
+};
+document.getElementById('clearBtn').onclick = () => {
+  if(isPlaying) stopPlayback();
+  progression = [];
+  renderProgression();
+};
+
+/* ===================== テンポ ===================== */
+let bpm = 100;
+const tempoSlider = document.getElementById('tempoSlider');
+const tempoValue = document.getElementById('tempoValue');
+tempoSlider.oninput = () => {
+  bpm = parseInt(tempoSlider.value, 10);
+  tempoValue.textContent = bpm;
+};
+
+/* ===================== 音量 ===================== */
+let masterVolume = 0.8;
+const volumeSlider = document.getElementById('volumeSlider');
+const volumeValue = document.getElementById('volumeValue');
+volumeSlider.oninput = () => {
+  masterVolume = parseInt(volumeSlider.value, 10) / 100;
+  volumeValue.textContent = volumeSlider.value;
+  if(masterGain){
+    masterGain.gain.setTargetAtTime(masterVolume, audioCtx.currentTime, 0.01);
+  }
+};
+
+/* ===================== オーディオエンジン ===================== */
+let audioCtx = null;
+let masterGain = null;
+let isPlaying = false;
+let currentChordIndex = 0;
+let nextNoteTime = 0.0;
+let schedulerTimerId = null;
+let activeNodes = []; // { stop() } を持つノードを記録し、即時停止に使う
+
+function ensureAudioContext(){
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = masterVolume;
+    masterGain.connect(audioCtx.destination);
+  }
+}
+
+const scheduleAheadTime = 0.12; // 秒
+const lookaheadMs = 25;
+
+function secondsPerBeat(){ return 60.0 / bpm; }
+function measureDuration(){ return secondsPerBeat() * 4; }
+
+function createNoiseBuffer(duration){
+  const sr = audioCtx.sampleRate;
+  const buffer = audioCtx.createBuffer(1, sr * duration, sr);
+  const data = buffer.getChannelData(0);
+  for(let i=0;i<data.length;i++){
+    data[i] = Math.random()*2 - 1;
+  }
+  return buffer;
+}
+
+function trackNode(node){
+  activeNodes.push(node);
+  return node;
+}
+
+/* ---- キーボード（コード）---- */
+function playKeyboardChord(chord, time, duration){
+  const notes = chordMidiNotes(chord, 4);
+  notes.forEach((midi, i) => {
+    const freq = midiToFreq(midi);
+    const osc1 = audioCtx.createOscillator();
+    const osc2 = audioCtx.createOscillator();
+    osc1.type = 'triangle';
+    osc2.type = 'sine';
+    osc1.frequency.value = freq;
+    osc2.frequency.value = freq;
+    osc2.detune.value = 6;
+
+    const gain = audioCtx.createGain();
+    const attack = 0.02;
+    const release = 0.35;
+    const sustainLevel = 0.11;
+    const peak = 0.16;
+
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(peak, time + attack);
+    gain.gain.exponentialRampToValueAtTime(sustainLevel, time + attack + 0.15);
+    gain.gain.setValueAtTime(sustainLevel, time + duration - release);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+
+    osc1.connect(gain); osc2.connect(gain);
+    gain.connect(masterGain);
+
+    osc1.start(time + i*0.01);
+    osc2.start(time + i*0.01);
+    osc1.stop(time + duration + 0.05);
+    osc2.stop(time + duration + 0.05);
+    trackNode(osc1); trackNode(osc2);
+  });
+}
+
+/* ---- ベース ---- */
+function playBassNote(midi, time, duration){
+  const freq = midiToFreq(midi);
+  const osc = audioCtx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.value = freq;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0, time);
+  gain.gain.linearRampToValueAtTime(0.35, time + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+  osc.connect(gain);
+  gain.connect(masterGain);
+  osc.start(time);
+  osc.stop(time + duration + 0.05);
+  trackNode(osc);
+}
+
+function playBassForMeasure(chord, time){
+  const rootMidi = midiForRoot(chord.root, 2); // 低いオクターブ
+  const beat = secondsPerBeat();
+  // 1拍目・3拍目にルート、2拍目・4拍目に軽く5度を混ぜたロック風パターン
+  playBassNote(rootMidi, time, beat*0.9);
+  playBassNote(rootMidi, time + beat*2, beat*0.9);
+  playBassNote(rootMidi + 7, time + beat, beat*0.4);
+  playBassNote(rootMidi, time + beat*3, beat*0.9);
+}
+
+/* ---- ドラム ---- */
+function playKick(time){
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(150, time);
+  osc.frequency.exponentialRampToValueAtTime(45, time + 0.12);
+  gain.gain.setValueAtTime(0.9, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.22);
+  osc.connect(gain);
+  gain.connect(masterGain);
+  osc.start(time);
+  osc.stop(time + 0.25);
+  trackNode(osc);
+}
+
+function playSnare(time){
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = createNoiseBuffer(0.2);
+  const bandpass = audioCtx.createBiquadFilter();
+  bandpass.type = 'bandpass';
+  bandpass.frequency.value = 1800;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.5, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
+  noise.connect(bandpass);
+  bandpass.connect(gain);
+  gain.connect(masterGain);
+  noise.start(time);
+  noise.stop(time + 0.2);
+  trackNode(noise);
+}
+
+function playHihat(time, open=false){
+  const noise = audioCtx.createBufferSource();
+  const dur = open ? 0.28 : 0.06;
+  noise.buffer = createNoiseBuffer(dur);
+  const highpass = audioCtx.createBiquadFilter();
+  highpass.type = 'highpass';
+  highpass.frequency.value = 7000;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.22, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+  noise.connect(highpass);
+  highpass.connect(gain);
+  gain.connect(masterGain);
+  noise.start(time);
+  noise.stop(time + dur + 0.02);
+  trackNode(noise);
+}
+
+function playDrumsForMeasure(time){
+  const beat = secondsPerBeat();
+  const eighth = beat / 2;
+  // キック: 1拍目, 3拍目の裏
+  playKick(time);
+  playKick(time + beat*2.5*0 + beat*2); // 3拍目
+  playKick(time + beat*3 + eighth);     // 4拍目の裏（ロックらしいシンコペーション）
+  // スネア: 2拍目, 4拍目
+  playSnare(time + beat);
+  playSnare(time + beat*3);
+  // ハイハット: 8分刻み
+  for(let i=0;i<8;i++){
+    playHihat(time + eighth*i, i===7);
+  }
+}
+
+/* ---- UI 同期表示 ---- */
+const currentChordEl = document.getElementById('currentChord');
+const measureIndicatorEl = document.getElementById('measureIndicator');
+
+function scheduleUIUpdate(index, time){
+  const delayMs = Math.max(0, (time - audioCtx.currentTime) * 1000);
+  setTimeout(() => {
+    if(!isPlaying) return;
+    currentChordEl.textContent = chordLabel(progression[index]);
+    measureIndicatorEl.textContent = `${index+1} / ${progression.length} 小節目`;
+    displayedIndex = index;
+    renderProgression(index);
+  }, delayMs);
+}
+
+/* ---- スケジューラ本体 ---- */
+function scheduleMeasure(index, time){
+  const chord = progression[index];
+  playKeyboardChord(chord, time, measureDuration());
+  playBassForMeasure(chord, time);
+  playDrumsForMeasure(time);
+  scheduleUIUpdate(index, time);
+}
+
+function scheduler(){
+  while(nextNoteTime < audioCtx.currentTime + scheduleAheadTime){
+    scheduleMeasure(currentChordIndex, nextNoteTime);
+    nextNoteTime += measureDuration();
+    currentChordIndex = (currentChordIndex + 1) % progression.length;
+  }
+  schedulerTimerId = setTimeout(scheduler, lookaheadMs);
+}
+
+/* ===================== 再生 / 停止 ===================== */
+const playBtn = document.getElementById('playBtn');
+const stopBtn = document.getElementById('stopBtn');
+
+function startPlayback(){
+  if(progression.length === 0){
+    alert('先にコードを1つ以上追加してください。');
+    return;
+  }
+  ensureAudioContext();
+  if(audioCtx.state === 'suspended'){
+    audioCtx.resume();
+  }
+  isPlaying = true;
+  currentChordIndex = 0;
+  nextNoteTime = audioCtx.currentTime + 0.15;
+  activeNodes = [];
+  playBtn.disabled = true;
+  stopBtn.disabled = false;
+  scheduler();
+}
+
+function stopPlayback(){
+  isPlaying = false;
+  clearTimeout(schedulerTimerId);
+  const now = audioCtx ? audioCtx.currentTime : 0;
+  activeNodes.forEach(node => {
+    try{ node.stop(now); }catch(e){ /* すでに停止済みの場合は無視 */ }
+  });
+  activeNodes = [];
+  playBtn.disabled = false;
+  stopBtn.disabled = true;
+  currentChordEl.textContent = '-';
+  measureIndicatorEl.textContent = '停止しました';
+  displayedIndex = -1;
+  renderProgression();
+}
+
+playBtn.onclick = startPlayback;
+stopBtn.onclick = stopPlayback;
+</script>
+</body>
+</html>
