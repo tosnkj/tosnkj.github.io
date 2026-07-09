@@ -97,6 +97,56 @@
   }
   #addChordBtn:hover{ filter:brightness(1.1); }
 
+  .mode-btn{
+    flex:1;
+    min-width:120px;
+    padding:12px 14px;
+    text-align:center;
+    font-weight:700;
+    font-size:14px;
+  }
+  .mode-btn.active{
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    border-color:var(--accent);
+    color:#111;
+  }
+  .mode-desc{
+    color:var(--muted);
+    font-size:12px;
+    margin-top:10px;
+    line-height:1.6;
+  }
+  .bars-field{
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .bars-field label{
+    font-size:13px;
+    color:var(--muted);
+  }
+  #barsInput{
+    width:84px;
+  }
+  .bars-field.hidden{
+    display:none;
+  }
+  .octave-field{
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .octave-field label{
+    font-size:13px;
+    color:var(--muted);
+  }
+  #octaveSelect{
+    width:96px;
+  }
+  .octave-field.hidden{
+    display:none;
+  }
+
   #progressionList{
     display:flex;
     flex-wrap:wrap;
@@ -124,6 +174,24 @@
     color:var(--muted);
     font-size:11px;
     font-weight:400;
+  }
+  .chip .bars{
+    color:var(--muted);
+    font-size:11px;
+    font-weight:400;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:5px;
+    padding:1px 5px;
+  }
+  .chip .octave{
+    color:var(--muted);
+    font-size:11px;
+    font-weight:400;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:5px;
+    padding:1px 5px;
   }
   .chip button{
     padding:2px 7px;
@@ -201,6 +269,16 @@
   <div class="subtitle">Ad Lib 練習用バッキングアプリ &mdash; コード進行を組んで、Keyboard / Bass / Drum のバッキングに合わせてソロを弾こう</div>
 
   <div class="panel">
+    <h2>0. モードを選択</h2>
+    <div class="row">
+      <button type="button" id="beginnerModeBtn" class="mode-btn">初級者Mode</button>
+      <button type="button" id="intermediate1ModeBtn" class="mode-btn">中級者①Mode</button>
+      <button type="button" id="intermediate2ModeBtn" class="mode-btn">中級者②Mode</button>
+    </div>
+    <div class="mode-desc" id="modeDesc"></div>
+  </div>
+
+  <div class="panel">
     <h2>1. 曲のキーを設定</h2>
     <div class="row">
       <select id="keySelect"></select>
@@ -213,6 +291,14 @@
     <div class="row">
       <select id="rootSelect"></select>
       <select id="qualitySelect"></select>
+      <div class="bars-field hidden" id="barsField">
+        <label for="barsInput">小節数</label>
+        <input type="text" id="barsInput" value="1" placeholder="例: 1, 1/2, 1/3">
+      </div>
+      <div class="octave-field hidden" id="octaveField">
+        <label for="octaveSelect">Octave</label>
+        <select id="octaveSelect"></select>
+      </div>
       <button id="addChordBtn">＋ 追加</button>
       <button id="clearBtn">全消去</button>
     </div>
@@ -244,7 +330,7 @@
     <div id="measureIndicator">コードを追加して再生を押してください</div>
   </div>
 
-  <footer>1コード = 1小節。最後まで進んだら自動的に最初の小節へ戻り、停止するまでループします。</footer>
+  <footer id="footerText">1コード = 1小節。最後まで進んだら自動的に最初の小節へ戻り、停止するまでループします。</footer>
 </div>
 
 <script>
@@ -268,6 +354,75 @@ QUALITIES.forEach(q => {
   opt.value = q.key; opt.textContent = q.label ? `${q.label}` : 'major';
   qualitySelect.appendChild(opt);
 });
+
+/* ===================== モード管理 ===================== */
+// 'beginner'      = 初級者Mode（1コード=1小節固定）
+// 'intermediate1' = 中級者①Mode（小節数を自由に指定）
+// 'intermediate2' = 中級者②Mode（小節数に加えて、コードごとのOctave設定も可能）
+let appMode = 'beginner';
+
+const beginnerModeBtn = document.getElementById('beginnerModeBtn');
+const intermediate1ModeBtn = document.getElementById('intermediate1ModeBtn');
+const intermediate2ModeBtn = document.getElementById('intermediate2ModeBtn');
+const modeDescEl = document.getElementById('modeDesc');
+const barsFieldEl = document.getElementById('barsField');
+const barsInputEl = document.getElementById('barsInput');
+const octaveFieldEl = document.getElementById('octaveField');
+const octaveSelectEl = document.getElementById('octaveSelect');
+const footerTextEl = document.getElementById('footerText');
+
+const MODE_DESC = {
+  beginner: '1コード＝1小節の固定進行です。まずはこちらでコード進行とバッキングに慣れましょう。',
+  intermediate1: 'コードごとに小節数を自由に指定できます。整数（1, 2, 3…）のほか、1/2・1/3・1/4 のような簡単な分数も入力できます。',
+  intermediate2: '中級者①の機能（自由な小節数）に加えて、コードごとにOctave（基準の音高から何オクターブ上げ下げするか）を指定できます。'
+};
+const FOOTER_TEXT = {
+  beginner: '1コード＝1小節。最後まで進んだら自動的に最初の小節へ戻り、停止するまでループします。',
+  intermediate1: 'コードごとに指定した小節数で進行します。最後まで進んだら自動的に最初へ戻り、停止するまでループします。',
+  intermediate2: 'コードごとに指定した小節数・Octaveで進行します。最後まで進んだら自動的に最初へ戻り、停止するまでループします。'
+};
+
+// Octave選択肢（+2 〜 -2 の順、上にプラス・下にマイナスが来るように配置）
+for(let oct = 2; oct >= -2; oct--){
+  const opt = document.createElement('option');
+  opt.value = String(oct);
+  opt.textContent = oct === 0 ? '±0' : (oct > 0 ? `+${oct}` : `${oct}`);
+  if(oct === 0) opt.selected = true;
+  octaveSelectEl.appendChild(opt);
+}
+
+function setMode(mode){
+  appMode = mode;
+  beginnerModeBtn.classList.toggle('active', mode === 'beginner');
+  intermediate1ModeBtn.classList.toggle('active', mode === 'intermediate1');
+  intermediate2ModeBtn.classList.toggle('active', mode === 'intermediate2');
+  modeDescEl.textContent = MODE_DESC[mode];
+  footerTextEl.textContent = FOOTER_TEXT[mode];
+  barsFieldEl.classList.toggle('hidden', mode === 'beginner');
+  octaveFieldEl.classList.toggle('hidden', mode !== 'intermediate2');
+}
+beginnerModeBtn.onclick = () => setMode('beginner');
+intermediate1ModeBtn.onclick = () => setMode('intermediate1');
+intermediate2ModeBtn.onclick = () => setMode('intermediate2');
+setMode('beginner'); // 起動時のデフォルトは初級者Mode
+
+// "1", "1/2", "1/3" のような表記を小節数（数値）に変換する。不正な値は null。
+function parseBars(str){
+  if(typeof str !== 'string') return null;
+  str = str.trim();
+  if(!str) return null;
+  if(str.includes('/')){
+    const parts = str.split('/');
+    if(parts.length !== 2) return null;
+    const n = parseFloat(parts[0].trim());
+    const d = parseFloat(parts[1].trim());
+    if(!isFinite(n) || !isFinite(d) || n <= 0 || d <= 0) return null;
+    return n / d;
+  }
+  const v = parseFloat(str);
+  if(!isFinite(v) || v <= 0) return null;
+  return v;
+}
 
 /* ===================== キー & 度数（ローマ数字）===================== */
 let songKey = null; // null = 未設定
@@ -322,7 +477,7 @@ keySelect.onchange = () => {
 };
 
 /* ===================== 進行データ ===================== */
-let progression = []; // { root, qualityKey }
+let progression = []; // { root, qualityKey, bars, barsDisplay, octave }
 let displayedIndex = -1; // 現在ハイライト表示中の小節（再生していない時は -1）
 
 function chordLabel(chord){
@@ -360,7 +515,9 @@ function renderProgression(highlightIndex = -1){
   progression.forEach((chord, i) => {
     const chip = document.createElement('div');
     chip.className = 'chip' + (i === highlightIndex ? ' playing' : '');
-    chip.innerHTML = `<span class="idx">${i+1}</span><span>${chordLabel(chord)}</span>`;
+    const barsBadge = (chord.bars !== 1) ? `<span class="bars">${chord.barsDisplay}小節</span>` : '';
+    const octaveBadge = (chord.octave) ? `<span class="octave">${chord.octave > 0 ? '+' : ''}${chord.octave}oct</span>` : '';
+    chip.innerHTML = `<span class="idx">${i+1}</span><span>${chordLabel(chord)}</span>${barsBadge}${octaveBadge}`;
     const delBtn = document.createElement('button');
     delBtn.textContent = '×';
     delBtn.title = '削除';
@@ -375,7 +532,22 @@ function renderProgression(highlightIndex = -1){
 renderProgression();
 
 document.getElementById('addChordBtn').onclick = () => {
-  progression.push({ root: rootSelect.value, qualityKey: qualitySelect.value });
+  let bars = 1;
+  let barsDisplay = '1';
+  let octave = 0;
+  if(appMode === 'intermediate1' || appMode === 'intermediate2'){
+    const parsed = parseBars(barsInputEl.value);
+    if(parsed === null){
+      alert('小節数の入力が正しくありません。整数（例: 1, 2）か、簡単な分数（例: 1/2, 1/3, 1/4）で入力してください。');
+      return;
+    }
+    bars = parsed;
+    barsDisplay = barsInputEl.value.trim();
+  }
+  if(appMode === 'intermediate2'){
+    octave = parseInt(octaveSelectEl.value, 10) || 0;
+  }
+  progression.push({ root: rootSelect.value, qualityKey: qualitySelect.value, bars, barsDisplay, octave });
   renderProgression();
 };
 document.getElementById('clearBtn').onclick = () => {
@@ -428,6 +600,8 @@ const lookaheadMs = 25;
 
 function secondsPerBeat(){ return 60.0 / bpm; }
 function measureDuration(){ return secondsPerBeat() * 4; }
+// コードごとの実際の長さ（秒）。中級者Modeでは bars が 1 以外の値（整数・分数）を取り得る。
+function chordDuration(chord){ return measureDuration() * (chord.bars || 1); }
 
 function createNoiseBuffer(duration){
   const sr = audioCtx.sampleRate;
@@ -446,7 +620,7 @@ function trackNode(node){
 
 /* ---- キーボード（コード）---- */
 function playKeyboardChord(chord, time, duration){
-  const notes = chordMidiNotes(chord, 4);
+  const notes = chordMidiNotes(chord, 4 + (chord.octave || 0));
   notes.forEach((midi, i) => {
     const freq = midiToFreq(midi);
     const osc1 = audioCtx.createOscillator();
@@ -458,15 +632,19 @@ function playKeyboardChord(chord, time, duration){
     osc2.detune.value = 6;
 
     const gain = audioCtx.createGain();
-    const attack = 0.02;
-    const release = 0.35;
+    // 中級者Modeの分数小節（例: 1/4小節）で duration が短くなっても
+    // エンベロープの各段階が時間的に逆転しないよう、duration に応じて自動的に縮める。
+    const attack = Math.min(0.02, duration * 0.2);
+    const release = Math.min(0.35, duration * 0.3);
     const sustainLevel = 0.11;
     const peak = 0.16;
+    const tSustainReach = time + attack + Math.max(0.001, Math.min(0.15, duration - attack - release));
+    const tReleaseStart = Math.max(tSustainReach, time + duration - release);
 
     gain.gain.setValueAtTime(0, time);
     gain.gain.linearRampToValueAtTime(peak, time + attack);
-    gain.gain.exponentialRampToValueAtTime(sustainLevel, time + attack + 0.15);
-    gain.gain.setValueAtTime(sustainLevel, time + duration - release);
+    gain.gain.exponentialRampToValueAtTime(sustainLevel, tSustainReach);
+    gain.gain.setValueAtTime(sustainLevel, tReleaseStart);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
 
     osc1.connect(gain); osc2.connect(gain);
@@ -487,24 +665,29 @@ function playBassNote(midi, time, duration){
   osc.type = 'triangle';
   osc.frequency.value = freq;
   const gain = audioCtx.createGain();
+  // 中級者Modeの分数小節で duration が短くなる場合に備え、attackを duration に応じて縮める
+  const attack = Math.min(0.015, duration * 0.3);
+  const releaseEnd = Math.max(time + attack + 0.005, time + duration);
   gain.gain.setValueAtTime(0, time);
-  gain.gain.linearRampToValueAtTime(0.35, time + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+  gain.gain.linearRampToValueAtTime(0.35, time + attack);
+  gain.gain.exponentialRampToValueAtTime(0.0001, releaseEnd);
   osc.connect(gain);
   gain.connect(masterGain);
   osc.start(time);
-  osc.stop(time + duration + 0.05);
+  osc.stop(releaseEnd + 0.05);
   trackNode(osc);
 }
 
-function playBassForMeasure(chord, time){
-  const rootMidi = midiForRoot(chord.root, 2); // 低いオクターブ
-  const beat = secondsPerBeat();
+function playBassForMeasure(chord, time, duration){
+  const rootMidi = midiForRoot(chord.root, 2 + (chord.octave || 0)); // 低いオクターブ（Octave設定分シフト）
+  // duration は1小節（4拍）分とは限らないため、4等分した長さを「拍相当」として使う。
+  // bars=1（通常の1小節=4拍）のときは従来と全く同じ挙動になる。
+  const unit = duration / 4;
   // 1拍目・3拍目にルート、2拍目・4拍目に軽く5度を混ぜたロック風パターン
-  playBassNote(rootMidi, time, beat*0.9);
-  playBassNote(rootMidi, time + beat*2, beat*0.9);
-  playBassNote(rootMidi + 7, time + beat, beat*0.4);
-  playBassNote(rootMidi, time + beat*3, beat*0.9);
+  playBassNote(rootMidi, time, unit*0.9);
+  playBassNote(rootMidi, time + unit*2, unit*0.9);
+  playBassNote(rootMidi + 7, time + unit, unit*0.4);
+  playBassNote(rootMidi, time + unit*3, unit*0.9);
 }
 
 /* ---- ドラム ---- */
@@ -558,8 +741,10 @@ function playHihat(time, open=false){
   trackNode(noise);
 }
 
-function playDrumsForMeasure(time){
-  const beat = secondsPerBeat();
+function playDrumsForMeasure(time, duration){
+  // duration は1小節（4拍）分とは限らないため、4等分した長さを「拍相当」として使う。
+  // bars=1（通常の1小節=4拍）のときは従来と全く同じ挙動になる。
+  const beat = duration / 4;
   const eighth = beat / 2;
   // キック: 1拍目, 3拍目の裏
   playKick(time);
@@ -582,8 +767,10 @@ function scheduleUIUpdate(index, time){
   const delayMs = Math.max(0, (time - audioCtx.currentTime) * 1000);
   setTimeout(() => {
     if(!isPlaying) return;
-    currentChordEl.textContent = chordLabel(progression[index]);
-    measureIndicatorEl.textContent = `${index+1} / ${progression.length} 小節目`;
+    const chord = progression[index];
+    currentChordEl.textContent = chordLabel(chord);
+    const barsNote = (chord.bars !== 1) ? `（${chord.barsDisplay}小節）` : '';
+    measureIndicatorEl.textContent = `${index+1} / ${progression.length} コード目${barsNote}`;
     displayedIndex = index;
     renderProgression(index);
   }, delayMs);
@@ -592,16 +779,17 @@ function scheduleUIUpdate(index, time){
 /* ---- スケジューラ本体 ---- */
 function scheduleMeasure(index, time){
   const chord = progression[index];
-  playKeyboardChord(chord, time, measureDuration());
-  playBassForMeasure(chord, time);
-  playDrumsForMeasure(time);
+  const duration = chordDuration(chord);
+  playKeyboardChord(chord, time, duration);
+  playBassForMeasure(chord, time, duration);
+  playDrumsForMeasure(time, duration);
   scheduleUIUpdate(index, time);
 }
 
 function scheduler(){
   while(nextNoteTime < audioCtx.currentTime + scheduleAheadTime){
     scheduleMeasure(currentChordIndex, nextNoteTime);
-    nextNoteTime += measureDuration();
+    nextNoteTime += chordDuration(progression[currentChordIndex]);
     currentChordIndex = (currentChordIndex + 1) % progression.length;
   }
   schedulerTimerId = setTimeout(scheduler, lookaheadMs);
