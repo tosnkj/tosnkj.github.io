@@ -318,8 +318,8 @@
       </label>
       <label class="tempo-label">
         Volume
-        <input type="range" id="volumeSlider" min="0" max="100" value="80">
-        <span id="volumeValue">80</span>%
+        <input type="number" id="volumeInput" min="0" max="100" step="1" value="80" style="width:70px;">
+        %（0〜100）
       </label>
       <div class="transport">
         <button id="playBtn">▶ 再生（無限ループ）</button>
@@ -653,13 +653,25 @@ tempoInput.oninput = () => {
 
 /* ===================== 音量 ===================== */
 let masterVolume = 0.8;
-const volumeSlider = document.getElementById('volumeSlider');
-const volumeValue = document.getElementById('volumeValue');
-volumeSlider.oninput = () => {
-  masterVolume = parseInt(volumeSlider.value, 10) / 100;
-  volumeValue.textContent = volumeSlider.value;
+const volumeInput = document.getElementById('volumeInput');
+function applyVolumeInput(){
+  let v = parseInt(volumeInput.value, 10);
+  if(!isFinite(v)) v = Math.round(masterVolume * 100); // 不正値のときは直前の値を維持
+  v = Math.min(100, Math.max(0, v));
+  masterVolume = v / 100;
+  volumeInput.value = v;
   if(masterGain){
     masterGain.gain.setTargetAtTime(masterVolume, audioCtx.currentTime, 0.01);
+  }
+}
+volumeInput.onchange = applyVolumeInput;
+volumeInput.oninput = () => {
+  const v = parseInt(volumeInput.value, 10);
+  if(isFinite(v)){
+    masterVolume = v / 100; // 入力中は範囲外でも一旦反映し、確定時(onchange)にクランプする
+    if(masterGain){
+      masterGain.gain.setTargetAtTime(masterVolume, audioCtx.currentTime, 0.01);
+    }
   }
 };
 
