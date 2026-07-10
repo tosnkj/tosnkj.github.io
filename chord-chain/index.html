@@ -181,6 +181,32 @@
     font-size:12px;
     line-height:1;
   }
+  .gap{
+    width:16px;
+    align-self:stretch;
+    min-height:34px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    border-radius:6px;
+    color:var(--muted);
+    font-size:14px;
+    font-weight:700;
+    opacity:.35;
+    transition:all .15s ease;
+  }
+  .gap:hover{
+    opacity:1;
+    background:rgba(255,176,32,.12);
+    color:var(--accent2);
+  }
+  .gap.active{
+    opacity:1;
+    background:rgba(255,176,32,.22);
+    color:var(--accent2);
+    box-shadow:0 0 0 1px var(--accent2) inset;
+  }
   .empty-msg{
     color:var(--muted);
     font-size:13px;
@@ -271,11 +297,14 @@
     </div>
     <div class="row" style="margin-top:10px;">
       <button id="copySelectedBtn">選択をコピー</button>
-      <button id="pasteBtn" disabled>貼り付け（末尾に追加）</button>
+      <button id="pasteBtn" disabled>貼り付け</button>
       <button id="clearSelectionBtn">選択解除</button>
       <span id="clipboardStatus" style="color:var(--muted);font-size:12px;"></span>
     </div>
-    <div style="color:var(--muted);font-size:12px;margin-top:6px;">コードをクリックすると選択できます（複数選択可）。よく使う進行パターンを選択してコピー→貼り付けで繰り返し使えます。</div>
+    <div style="color:var(--muted);font-size:12px;margin-top:6px;">
+      進行リストの小節と小節の間にある「＋」をクリックすると、そこが次の追加位置になります（未クリックなら末尾に追加）。コードそのものをクリックすると選択でき（複数選択可）、よく使う進行パターンを選択してコピー→貼り付けで繰り返し使えます。
+    </div>
+    <div style="color:var(--muted);font-size:12px;margin-top:4px;">追加位置: <span id="insertPositionStatus" style="color:var(--accent2);"></span></div>
     <div id="progressionList"></div>
   </div>
 
@@ -440,8 +469,51 @@ function midiToFreq(midi){
 
 /* ===================== UI: 進行リスト ===================== */
 const progressionListEl = document.getElementById('progressionList');
+const insertPositionStatusEl = document.getElementById('insertPositionStatus');
 let selectedIndices = new Set(); // 選択中のコードのインデックス（コピー用）
 let clipboardBuffer = []; // コピーされたコード（deep clone）を保持
+// 次にコードを追加/貼り付けする位置（0始まりのギャップ番号）。
+// null の場合は「常に末尾」を意味する動的なデフォルト状態。
+let insertGapIndex = null;
+
+// 現在の insertGapIndex から、実際に splice する挿入インデックス（0始まり）を求める。
+function computeInsertIndex(){
+  if(insertGapIndex === null) return progression.length;
+  return Math.min(Math.max(insertGapIndex, 0), progression.length);
+}
+
+// gapIndex が「現在アクティブな挿入位置」かどうかを判定する。
+function isGapActive(gapIndex){
+  if(insertGapIndex === null) return gapIndex === progression.length; // 末尾ギャップをデフォルトとして表示
+  return insertGapIndex === gapIndex;
+}
+
+// n小節目とn+1小節目の間、のような分かりやすい説明文を作る。
+function insertPositionDescription(){
+  if(progression.length === 0) return '（コード追加時、最初のコードになります）';
+  const idx = computeInsertIndex();
+  if(idx === 0) return `先頭（${chordLabel(progression[0])} の前）`;
+  if(idx === progression.length) return `末尾（${chordLabel(progression[progression.length-1])} の後）`;
+  return `${idx}小節目と${idx+1}小節目の間（${chordLabel(progression[idx-1])} と ${chordLabel(progression[idx])} の間）`;
+}
+
+function updateInsertPositionStatus(){
+  insertPositionStatusEl.textContent = insertPositionDescription();
+}
+
+// 進行リストの「+」ギャップ要素を1つ作る。クリックするとそこが次の追加位置になる。
+function createGapEl(gapIndex, highlightIndex){
+  const gap = document.createElement('div');
+  gap.className = 'gap' + (isGapActive(gapIndex) ? ' active' : '');
+  gap.textContent = '+';
+  gap.title = 'クリックすると、ここが次の追加位置になります';
+  gap.onclick = () => {
+    // 末尾のギャップをクリックした場合は、動的な「常に末尾」デフォルトに戻す
+    insertGapIndex = (gapIndex >= progression.length) ? null : gapIndex;
+    renderProgression(highlightIndex);
+  };
+  return gap;
+}
 
 function renderProgression(highlightIndex = -1){
   progressionListEl.innerHTML = '';
@@ -450,8 +522,10 @@ function renderProgression(highlightIndex = -1){
     msg.className = 'empty-msg';
     msg.textContent = 'まだコードがありません。上のメニューから追加してください。';
     progressionListEl.appendChild(msg);
+    updateInsertPositionStatus();
     return;
   }
+  progressionListEl.appendChild(createGapEl(0, highlightIndex));
   progression.forEach((chord, i) => {
     const chip = document.createElement('div');
     chip.className = 'chip' + (i === highlightIndex ? ' playing' : '') + (selectedIndices.has(i) ? ' selected' : '');
@@ -474,12 +548,15 @@ function renderProgression(highlightIndex = -1){
       e.stopPropagation(); // 削除ボタンでは選択トグルを発火させない
       progression.splice(i, 1);
       selectedIndices.clear(); // インデックスがずれるため選択はリセット
+      insertGapIndex = null; // 追加位置の指定もリセットし、末尾デフォルトに戻す
       renderProgression();
       updateClipboardStatus();
     };
     chip.appendChild(delBtn);
     progressionListEl.appendChild(chip);
+    progressionListEl.appendChild(createGapEl(i + 1, highlightIndex));
   });
+  updateInsertPositionStatus();
 }
 renderProgression();
 
@@ -513,7 +590,12 @@ copySelectedBtn.onclick = () => {
 pasteBtn.onclick = () => {
   if(clipboardBuffer.length === 0) return;
   const clones = clipboardBuffer.map(c => JSON.parse(JSON.stringify(c)));
-  progression.push(...clones);
+  const wasDefault = (insertGapIndex === null);
+  const insertIndex = computeInsertIndex();
+  progression.splice(insertIndex, 0, ...clones);
+  selectedIndices.clear(); // インデックスがずれるため選択はリセット
+  // 明示的な挿入位置を指定していた場合は、貼り付けた続きに次を追加できるようポインタを進める
+  insertGapIndex = wasDefault ? null : insertIndex + clones.length;
   renderProgression();
   updateClipboardStatus();
 };
@@ -533,13 +615,22 @@ document.getElementById('addChordBtn').onclick = () => {
   const bars = parsed;
   const barsDisplay = barsInputEl.value.trim();
   const octave = parseInt(octaveSelectEl.value, 10) || 0;
-  progression.push({ root: rootSelect.value, qualityKey: qualitySelect.value, bars, barsDisplay, octave });
+  const newChord = { root: rootSelect.value, qualityKey: qualitySelect.value, bars, barsDisplay, octave };
+  const wasDefault = (insertGapIndex === null);
+  const insertIndex = computeInsertIndex();
+  progression.splice(insertIndex, 0, newChord);
+  selectedIndices.clear(); // インデックスがずれるため選択はリセット
+  // 明示的な挿入位置を指定していた場合は、今追加したコードの直後を次のデフォルト挿入位置にする
+  // （途中に複数のコードを連続して差し込みたいときに、毎回ギャップを選び直さなくて済むようにする）
+  insertGapIndex = wasDefault ? null : insertIndex + 1;
   renderProgression();
+  updateClipboardStatus();
 };
 document.getElementById('clearBtn').onclick = () => {
   if(isPlaying) stopPlayback();
   progression = [];
   selectedIndices.clear();
+  insertGapIndex = null;
   renderProgression();
   updateClipboardStatus();
 };
