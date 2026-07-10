@@ -170,6 +170,14 @@
     box-shadow:0 0 12px rgba(255,90,31,.5);
     color:var(--accent2);
   }
+  .chip{
+    cursor:pointer;
+  }
+  .chip.selected{
+    border-color:var(--accent2);
+    background:rgba(255,176,32,.15);
+    box-shadow:0 0 0 1px var(--accent2) inset;
+  }
   .chip .idx{
     color:var(--muted);
     font-size:11px;
@@ -302,6 +310,13 @@
       <button id="addChordBtn">＋ 追加</button>
       <button id="clearBtn">全消去</button>
     </div>
+    <div class="row" style="margin-top:10px;">
+      <button id="copySelectedBtn">選択をコピー</button>
+      <button id="pasteBtn" disabled>貼り付け（末尾に追加）</button>
+      <button id="clearSelectionBtn">選択解除</button>
+      <span id="clipboardStatus" style="color:var(--muted);font-size:12px;"></span>
+    </div>
+    <div style="color:var(--muted);font-size:12px;margin-top:6px;">コードをクリックすると選択できます（複数選択可）。よく使う進行パターンを選択してコピー→貼り付けで繰り返し使えます。</div>
     <div id="progressionList"></div>
   </div>
 
@@ -310,7 +325,7 @@
     <div class="row" style="justify-content:space-between;">
       <label class="tempo-label">
         テンポ
-        <input type="range" id="tempoSlider" min="50" max="220" value="100">
+        <input type="range" id="tempoSlider" min="20" max="280" value="100">
         <span id="tempoValue">100</span> BPM
       </label>
       <label class="tempo-label">
@@ -502,6 +517,8 @@ function midiToFreq(midi){
 
 /* ===================== UI: 進行リスト ===================== */
 const progressionListEl = document.getElementById('progressionList');
+let selectedIndices = new Set(); // 選択中のコードのインデックス（コピー用）
+let clipboardBuffer = []; // コピーされたコード（deep clone）を保持
 
 function renderProgression(highlightIndex = -1){
   progressionListEl.innerHTML = '';
@@ -514,22 +531,75 @@ function renderProgression(highlightIndex = -1){
   }
   progression.forEach((chord, i) => {
     const chip = document.createElement('div');
-    chip.className = 'chip' + (i === highlightIndex ? ' playing' : '');
+    chip.className = 'chip' + (i === highlightIndex ? ' playing' : '') + (selectedIndices.has(i) ? ' selected' : '');
     const barsBadge = (chord.bars !== 1) ? `<span class="bars">${chord.barsDisplay}小節</span>` : '';
     const octaveBadge = (chord.octave) ? `<span class="octave">${chord.octave > 0 ? '+' : ''}${chord.octave}oct</span>` : '';
     chip.innerHTML = `<span class="idx">${i+1}</span><span>${chordLabel(chord)}</span>${barsBadge}${octaveBadge}`;
+    chip.onclick = () => {
+      if(selectedIndices.has(i)){
+        selectedIndices.delete(i);
+      }else{
+        selectedIndices.add(i);
+      }
+      renderProgression(highlightIndex);
+      updateClipboardStatus();
+    };
     const delBtn = document.createElement('button');
     delBtn.textContent = '×';
     delBtn.title = '削除';
-    delBtn.onclick = () => {
+    delBtn.onclick = (e) => {
+      e.stopPropagation(); // 削除ボタンでは選択トグルを発火させない
       progression.splice(i, 1);
+      selectedIndices.clear(); // インデックスがずれるため選択はリセット
       renderProgression();
+      updateClipboardStatus();
     };
     chip.appendChild(delBtn);
     progressionListEl.appendChild(chip);
   });
 }
 renderProgression();
+
+/* ---- 選択コードのコピー & 貼り付け ---- */
+const copySelectedBtn = document.getElementById('copySelectedBtn');
+const pasteBtn = document.getElementById('pasteBtn');
+const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+const clipboardStatusEl = document.getElementById('clipboardStatus');
+
+function updateClipboardStatus(){
+  const selCount = selectedIndices.size;
+  const bufCount = clipboardBuffer.length;
+  let msg = '';
+  if(selCount > 0) msg += `${selCount}個選択中　`;
+  if(bufCount > 0) msg += `コピー済み: ${bufCount}個`;
+  clipboardStatusEl.textContent = msg;
+  pasteBtn.disabled = bufCount === 0;
+}
+
+copySelectedBtn.onclick = () => {
+  if(selectedIndices.size === 0){
+    alert('コピーするコードを進行リストからクリックして選択してください。');
+    return;
+  }
+  // 元の並び順を保ったままコピー（deep clone）
+  const sortedIndices = Array.from(selectedIndices).sort((a,b) => a-b);
+  clipboardBuffer = sortedIndices.map(i => JSON.parse(JSON.stringify(progression[i])));
+  updateClipboardStatus();
+};
+
+pasteBtn.onclick = () => {
+  if(clipboardBuffer.length === 0) return;
+  const clones = clipboardBuffer.map(c => JSON.parse(JSON.stringify(c)));
+  progression.push(...clones);
+  renderProgression();
+  updateClipboardStatus();
+};
+
+clearSelectionBtn.onclick = () => {
+  selectedIndices.clear();
+  renderProgression();
+  updateClipboardStatus();
+};
 
 document.getElementById('addChordBtn').onclick = () => {
   let bars = 1;
@@ -553,7 +623,9 @@ document.getElementById('addChordBtn').onclick = () => {
 document.getElementById('clearBtn').onclick = () => {
   if(isPlaying) stopPlayback();
   progression = [];
+  selectedIndices.clear();
   renderProgression();
+  updateClipboardStatus();
 };
 
 /* ===================== テンポ ===================== */
@@ -636,8 +708,10 @@ function playKeyboardChord(chord, time, duration){
     // エンベロープの各段階が時間的に逆転しないよう、duration に応じて自動的に縮める。
     const attack = Math.min(0.02, duration * 0.2);
     const release = Math.min(0.35, duration * 0.3);
-    const sustainLevel = 0.11;
-    const peak = 0.16;
+    // Root音（i===0）は他の構成音より少し大きめに鳴らして、コードの土台を聴き取りやすくする。
+    const rootBoost = (i === 0) ? 1.35 : 1;
+    const sustainLevel = 0.11 * rootBoost;
+    const peak = 0.16 * rootBoost;
     const tSustainReach = time + attack + Math.max(0.001, Math.min(0.15, duration - attack - release));
     const tReleaseStart = Math.max(tSustainReach, time + duration - release);
 
