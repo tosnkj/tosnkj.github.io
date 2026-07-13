@@ -333,15 +333,16 @@
       <div class="transport">
         <button id="playBtn">▶ 再生（無限ループ）</button>
         <button id="stopBtn" disabled>■ 停止</button>
-        <button id="exportBtn">進行をエクスポート</button>
+        <button id="exportBtn">⬆ エクスポート（保存）</button>
+        <button id="importBtn">⬇ インポート（読み込み）</button>
       </div>
     </div>
   </div>
 
   <div class="panel" id="exportPanel" style="display:none;">
-    <h2>コード進行のエクスポート</h2>
+    <h2>コード進行のエクスポート（保存）</h2>
     <div style="color:var(--muted);font-size:12px;margin-bottom:10px;">
-      下のテキストをコピーして、フィードバックと一緒に貼り付けてください。
+      下のテキストをコピーして、フィードバックと一緒に貼り付けてください。「ファイルに保存」しておけば、アプリがバージョンアップした際に上の「インポート」ボタンから読み込んで、コードを一から並べ直さずに済みます。
     </div>
     <div class="row" style="align-items:flex-start;">
       <div style="flex:1;min-width:260px;">
@@ -353,11 +354,29 @@
       </div>
       <div style="flex:1;min-width:260px;">
         <div class="row" style="justify-content:space-between;margin-bottom:4px;">
-          <label style="font-size:13px;color:var(--muted);">JSON形式（そのまま再利用したい場合）</label>
+          <label style="font-size:13px;color:var(--muted);">JSON形式（保存・インポート用）</label>
           <button id="copyExportJsonBtn">コピー</button>
         </div>
         <textarea id="exportJsonArea" readonly style="width:100%;height:160px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;font-family:monospace;"></textarea>
+        <div class="row" style="margin-top:8px;">
+          <button id="downloadExportBtn">⬇ ファイルに保存 (.json)</button>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <div class="panel" id="importPanel" style="display:none;">
+    <h2>コード進行のインポート（読み込み）</h2>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:10px;">
+      保存しておいた .json ファイルを選ぶか、JSONテキストを貼り付けて「インポート」を押すと、現在の進行を置き換えます（現在の内容は上書きされるのでご注意ください）。
+    </div>
+    <div class="row" style="margin-bottom:8px;">
+      <input type="file" id="importFileInput" accept="application/json,.json">
+    </div>
+    <textarea id="importJsonArea" placeholder="ここにJSONを貼り付けることもできます" style="width:100%;height:120px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;font-family:monospace;"></textarea>
+    <div class="row" style="margin-top:8px;">
+      <button id="importJsonBtn">インポート</button>
+      <span id="importStatus" style="color:var(--muted);font-size:12px;"></span>
     </div>
   </div>
 
@@ -951,27 +970,15 @@ function playBassForMeasure(chord, time){
   const rootMidi = midiForRoot(chord.root, 2 + (chord.octave || 0)); // 低いオクターブ（Octave設定分シフト）
   const beatSec = secondsPerBeat();
   const totalBeats = (chord.bars || 1) * 4; // 実テンポ基準の拍数（ドラムと同じ考え方で一貫性を保つ）
-  const EPS = 1e-6;
   const GAP = 0.02; // 音の切れ目をわずかに作り、次の音のアタックを聴き取りやすくする程度の隙間
 
-  if(totalBeats <= 2 + EPS){
-    // 半小節以下の短いコードは、ルート音を目一杯サステインさせるだけにする
-    playBassNote(rootMidi, time, Math.max(0.05, totalBeats * beatSec - GAP));
-    return;
-  }
-
-  // 1小節（4拍）ごとに、前半2拍=ルート、後半2拍=5度、という半音符（ロングトーン）2発のパターンを繰り返す。
-  // 端数小節（例: 1.5小節）にも対応できるよう、小節末尾の残り拍数に応じて長さを調整する。
-  for(let measureStart = 0; measureStart < totalBeats - EPS; measureStart += 4){
-    const remain = Math.min(4, totalBeats - measureStart);
-    const firstLen = Math.min(2, remain);
-    playBassNote(rootMidi, time + measureStart * beatSec, firstLen * beatSec - GAP);
-    if(remain > 2 + EPS){
-      const secondLen = remain - 2;
-      playBassNote(rootMidi + 7, time + (measureStart + 2) * beatSec, secondLen * beatSec - GAP);
-    }
-  }
+  // コードの長さに関わらず、常にルート音1つだけを目一杯サステインさせる。
+  // （以前は2拍を超える長さのコードだけ後半に5度を挟んでいたため、
+  //   たまたま長いコードが1つ混じるとそこだけ唐突に音が増えて聴こえていた。
+  //   長さで構成音数が変わらないようにし、どのコードでも同じ鳴り方に統一する。）
+  playBassNote(rootMidi, time, Math.max(0.05, totalBeats * beatSec - GAP));
 }
+
 
 /* ---- ドラム ---- */
 function playKick(time){
@@ -1179,7 +1186,17 @@ function refreshExportPanel(){
 
 exportBtn.onclick = () => {
   refreshExportPanel();
-  exportPanel.style.display = exportPanel.style.display === 'none' ? 'block' : 'none';
+  const willShow = exportPanel.style.display === 'none';
+  exportPanel.style.display = willShow ? 'block' : 'none';
+  if(willShow) importPanel.style.display = 'none'; // 両方同時に開いて混乱しないよう、片方は閉じる
+};
+
+const importBtn = document.getElementById('importBtn');
+const importPanel = document.getElementById('importPanel');
+importBtn.onclick = () => {
+  const willShow = importPanel.style.display === 'none';
+  importPanel.style.display = willShow ? 'block' : 'none';
+  if(willShow) exportPanel.style.display = 'none'; // 両方同時に開いて混乱しないよう、片方は閉じる
 };
 
 // クリップボードへのコピー。失敗時（非対応環境など）はテキストを選択状態にして手動コピーを促す。
@@ -1198,6 +1215,117 @@ async function copyTextareaContent(textarea, btn){
 
 copyExportTextBtn.onclick = () => copyTextareaContent(exportTextArea, copyExportTextBtn);
 copyExportJsonBtn.onclick = () => copyTextareaContent(exportJsonArea, copyExportJsonBtn);
+
+// JSONを .json ファイルとしてダウンロードさせる（バージョンアップ後に読み込むための保存用）
+const downloadExportBtn = document.getElementById('downloadExportBtn');
+downloadExportBtn.onclick = () => {
+  refreshExportPanel();
+  const blob = new Blob([exportJsonArea.value], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g, '-');
+  a.href = url;
+  a.download = `chord-chain-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+/* ===================== インポート ===================== */
+const importFileInput = document.getElementById('importFileInput');
+const importJsonArea = document.getElementById('importJsonArea');
+const importJsonBtn = document.getElementById('importJsonBtn');
+const importStatusEl = document.getElementById('importStatus');
+
+// ファイルを選ぶと、テキストエリアにも内容を読み込んでおく（貼り付け操作なしでそのままインポート可能にする）
+importFileInput.onchange = () => {
+  const file = importFileInput.files && importFileInput.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    importJsonArea.value = String(reader.result || '');
+    importStatusEl.textContent = `${file.name} を読み込みました。内容を確認して「インポート」を押してください。`;
+  };
+  reader.onerror = () => {
+    importStatusEl.textContent = 'ファイルの読み込みに失敗しました。';
+  };
+  reader.readAsText(file);
+};
+
+// 与えられたコードオブジェクトが最低限の形をしているか確認する（壊れたデータで進行が壊れるのを防ぐ）
+function isValidImportedChord(c){
+  if(!c || typeof c !== 'object') return false;
+  if(!ROOTS.includes(c.root)) return false;
+  if(!QUALITIES.some(q => q.key === c.qualityKey)) return false;
+  if(typeof c.bars !== 'number' || !isFinite(c.bars) || c.bars <= 0) return false;
+  return true;
+}
+
+importJsonBtn.onclick = () => {
+  const raw = importJsonArea.value.trim();
+  if(!raw){
+    importStatusEl.textContent = 'JSONが入力されていません。ファイルを選ぶか、貼り付けてください。';
+    return;
+  }
+  let data;
+  try{
+    data = JSON.parse(raw);
+  }catch(e){
+    importStatusEl.textContent = 'JSONの形式が正しくありません。エクスポートしたファイルの内容をそのまま貼り付けてください。';
+    return;
+  }
+  if(!data || !Array.isArray(data.progression)){
+    importStatusEl.textContent = 'このJSONには進行データ（progression）が見つかりませんでした。';
+    return;
+  }
+  const importedChords = data.progression.filter(isValidImportedChord).map(c => ({
+    root: c.root,
+    qualityKey: c.qualityKey,
+    bars: c.bars,
+    barsDisplay: (typeof c.barsDisplay === 'string' && c.barsDisplay.trim()) ? c.barsDisplay : String(c.bars),
+    octave: (typeof c.octave === 'number' && isFinite(c.octave)) ? c.octave : 0,
+    drumPattern: DRUM_PATTERNS[c.drumPattern] ? c.drumPattern : DEFAULT_DRUM_PATTERN,
+  }));
+  if(importedChords.length === 0){
+    importStatusEl.textContent = '読み込めるコードが1つもありませんでした。ファイルの内容を確認してください。';
+    return;
+  }
+  if(importedChords.length < data.progression.length){
+    importStatusEl.textContent = `一部（${data.progression.length - importedChords.length}個）のコードは形式が不正だったためスキップしました。`;
+  }else{
+    importStatusEl.textContent = `${importedChords.length}個のコードをインポートしました。`;
+  }
+
+  if(isPlaying) stopPlayback();
+
+  // 進行を丸ごと置き換える
+  progression = importedChords;
+  selectedIndices.clear();
+  lastClickedIndex = null;
+  insertGapIndex = null;
+
+  // キー・テンポ・音量も、値があれば復元する
+  if(typeof data.songKey === 'string' && ROOTS.includes(data.songKey)){
+    songKey = data.songKey;
+  }else if(data.songKey === null || data.songKey === ''){
+    songKey = null;
+  }
+  keySelect.value = songKey || '';
+  populateRootSelect();
+
+  if(typeof data.bpm === 'number' && isFinite(data.bpm)){
+    tempoInput.value = data.bpm;
+    applyTempoInput();
+  }
+  if(typeof data.masterVolumePercent === 'number' && isFinite(data.masterVolumePercent)){
+    volumeInput.value = data.masterVolumePercent;
+    applyVolumeInput();
+  }
+
+  renderProgression();
+  updateClipboardStatus();
+};
 
 /* ---- Space キーで再生/停止をトグル ---- */
 document.addEventListener('keydown', (e) => {
