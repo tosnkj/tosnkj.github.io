@@ -311,7 +311,7 @@
       <button id="applyDrumPatternBtn">適用</button>
     </div>
     <div style="color:var(--muted);font-size:12px;margin-top:6px;">
-      進行リストの小節と小節の間にある「＋」をクリックすると、そこが次の追加位置になります（未クリックなら末尾に追加）。コードそのものをクリックすると選択でき（複数選択可）、よく使う進行パターンを選択してコピー→貼り付けで繰り返し使えます。複数選択した状態で「ドラムパターンを一括適用」を使うと、選択範囲全体に同じパターンをテンポに正確に合わせて適用できます。
+      進行リストの小節と小節の間にある「＋」をクリックすると、そこが次の追加位置になります（未クリックなら末尾に追加）。コードそのものをクリックすると選択でき（複数選択可、Shift+クリックで範囲選択）、よく使う進行パターンを選択してコピー→貼り付けで繰り返し使えます。複数選択した状態で「ドラムパターンを一括適用」を使うと、選択範囲全体に同じパターンをテンポに正確に合わせて適用できます。
     </div>
     <div style="color:var(--muted);font-size:12px;margin-top:4px;">追加位置: <span id="insertPositionStatus" style="color:var(--accent2);"></span></div>
     <div id="progressionList"></div>
@@ -569,6 +569,7 @@ function midiToFreq(midi){
 const progressionListEl = document.getElementById('progressionList');
 const insertPositionStatusEl = document.getElementById('insertPositionStatus');
 let selectedIndices = new Set(); // 選択中のコードのインデックス（コピー用）
+let lastClickedIndex = null; // Shiftクリックの範囲選択の起点
 let clipboardBuffer = []; // コピーされたコード（deep clone）を保持
 // 次にコードを追加/貼り付けする位置（0始まりのギャップ番号）。
 // null の場合は「常に末尾」を意味する動的なデフォルト状態。
@@ -632,11 +633,22 @@ function renderProgression(highlightIndex = -1){
     const patternKey = chord.drumPattern || DEFAULT_DRUM_PATTERN;
     const drumBadge = (patternKey !== DEFAULT_DRUM_PATTERN) ? `<span class="octave">${DRUM_PATTERNS[patternKey].label}</span>` : '';
     chip.innerHTML = `<span class="idx">${i+1}</span><span>${chordLabel(chord)}</span>${barsBadge}${octaveBadge}${drumBadge}`;
-    chip.onclick = () => {
-      if(selectedIndices.has(i)){
-        selectedIndices.delete(i);
+    chip.onclick = (e) => {
+      if(e.shiftKey && lastClickedIndex !== null){
+        // Shiftクリック: 前回クリックしたコードから今回クリックしたコードまでを範囲選択
+        const from = Math.min(lastClickedIndex, i);
+        const to = Math.max(lastClickedIndex, i);
+        for(let idx = from; idx <= to; idx++){
+          selectedIndices.add(idx);
+        }
+        // 範囲選択後も、次のShiftクリックのために起点はそのまま維持する
       }else{
-        selectedIndices.add(i);
+        if(selectedIndices.has(i)){
+          selectedIndices.delete(i);
+        }else{
+          selectedIndices.add(i);
+        }
+        lastClickedIndex = i;
       }
       renderProgression(highlightIndex);
       updateClipboardStatus();
@@ -647,7 +659,7 @@ function renderProgression(highlightIndex = -1){
     delBtn.onclick = (e) => {
       e.stopPropagation(); // 削除ボタンでは選択トグルを発火させない
       progression.splice(i, 1);
-      selectedIndices.clear(); // インデックスがずれるため選択はリセット
+      selectedIndices.clear(); lastClickedIndex = null; // インデックスがずれるため選択はリセット
       insertGapIndex = null; // 追加位置の指定もリセットし、末尾デフォルトに戻す
       renderProgression();
       updateClipboardStatus();
@@ -693,7 +705,7 @@ pasteBtn.onclick = () => {
   const wasDefault = (insertGapIndex === null);
   const insertIndex = computeInsertIndex();
   progression.splice(insertIndex, 0, ...clones);
-  selectedIndices.clear(); // インデックスがずれるため選択はリセット
+  selectedIndices.clear(); lastClickedIndex = null; // インデックスがずれるため選択はリセット
   // 明示的な挿入位置を指定していた場合は、貼り付けた続きに次を追加できるようポインタを進める
   insertGapIndex = wasDefault ? null : insertIndex + clones.length;
   renderProgression();
@@ -701,7 +713,7 @@ pasteBtn.onclick = () => {
 };
 
 clearSelectionBtn.onclick = () => {
-  selectedIndices.clear();
+  selectedIndices.clear(); lastClickedIndex = null;
   renderProgression();
   updateClipboardStatus();
 };
@@ -732,7 +744,7 @@ document.getElementById('addChordBtn').onclick = () => {
   const wasDefault = (insertGapIndex === null);
   const insertIndex = computeInsertIndex();
   progression.splice(insertIndex, 0, newChord);
-  selectedIndices.clear(); // インデックスがずれるため選択はリセット
+  selectedIndices.clear(); lastClickedIndex = null; // インデックスがずれるため選択はリセット
   // 明示的な挿入位置を指定していた場合は、今追加したコードの直後を次のデフォルト挿入位置にする
   // （途中に複数のコードを連続して差し込みたいときに、毎回ギャップを選び直さなくて済むようにする）
   insertGapIndex = wasDefault ? null : insertIndex + 1;
@@ -742,7 +754,7 @@ document.getElementById('addChordBtn').onclick = () => {
 document.getElementById('clearBtn').onclick = () => {
   if(isPlaying) stopPlayback();
   progression = [];
-  selectedIndices.clear();
+  selectedIndices.clear(); lastClickedIndex = null;
   insertGapIndex = null;
   renderProgression();
   updateClipboardStatus();
@@ -871,36 +883,70 @@ function playKeyboardChord(chord, time, duration){
   });
 }
 
-/* ---- ベース ---- */
+/* ---- ベース ----
+   以前は音符の長さ（duration）を目一杯 exponentialRamp で減衰させ続けており、
+   かつ4分音符主体の細切れパターンだったため「ブチブチ切れる」プツプツした鳴り方になっていた。
+   ここでは (1) アタック後にしっかりサステイン区間を持たせて音を長く伸ばす、
+   (2) 音符自体も半音符（2拍）主体のロングトーンにする、ことで滑らかな響きにする。
+*/
 function playBassNote(midi, time, duration){
   const freq = midiToFreq(midi);
   const osc = audioCtx.createOscillator();
   osc.type = 'triangle';
   osc.frequency.value = freq;
+
+  // 高域を少し削って、芯はあるが丸みのある低音にする
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 900;
+  filter.Q.value = 0.7;
+
   const gain = audioCtx.createGain();
-  // 分数小節で duration が短くなる場合に備え、attackを duration に応じて縮める
-  const attack = Math.min(0.015, duration * 0.3);
-  const releaseEnd = Math.max(time + attack + 0.005, time + duration);
+  // 短い音符（分数小節など）でも段階が逆転しないよう duration に応じて自動で縮める
+  const attack = Math.min(0.025, duration * 0.15);
+  const release = Math.min(0.18, duration * 0.35);
+  const peak = 0.5;
+  const sustainLevel = 0.4; // アタック後、ここでしっかり音を保持（サステイン）する
+  const releaseStart = Math.max(time + attack, time + duration - release);
+
   gain.gain.setValueAtTime(0, time);
-  gain.gain.linearRampToValueAtTime(0.5, time + attack);
-  gain.gain.exponentialRampToValueAtTime(0.0001, releaseEnd);
-  osc.connect(gain);
+  gain.gain.linearRampToValueAtTime(peak, time + attack);
+  gain.gain.exponentialRampToValueAtTime(sustainLevel, Math.min(time + attack + 0.05, releaseStart) + 0.0001);
+  gain.gain.setValueAtTime(sustainLevel, releaseStart); // ここまで音量をキープ＝ロングトーン
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+
+  osc.connect(filter);
+  filter.connect(gain);
   gain.connect(masterGain);
   osc.start(time);
-  osc.stop(releaseEnd + 0.05);
+  osc.stop(time + duration + 0.05);
   trackNode(osc);
 }
 
-function playBassForMeasure(chord, time, duration){
+function playBassForMeasure(chord, time){
   const rootMidi = midiForRoot(chord.root, 2 + (chord.octave || 0)); // 低いオクターブ（Octave設定分シフト）
-  // duration は1小節（4拍）分とは限らないため、4等分した長さを「拍相当」として使う。
-  // bars=1（通常の1小節=4拍）のときは従来と全く同じ挙動になる。
-  const unit = duration / 4;
-  // 1拍目・3拍目にルート、2拍目・4拍目に軽く5度を混ぜたロック風パターン
-  playBassNote(rootMidi, time, unit*0.9);
-  playBassNote(rootMidi, time + unit*2, unit*0.9);
-  playBassNote(rootMidi + 7, time + unit, unit*0.4);
-  playBassNote(rootMidi, time + unit*3, unit*0.9);
+  const beatSec = secondsPerBeat();
+  const totalBeats = (chord.bars || 1) * 4; // 実テンポ基準の拍数（ドラムと同じ考え方で一貫性を保つ）
+  const EPS = 1e-6;
+  const GAP = 0.02; // 音の切れ目をわずかに作り、次の音のアタックを聴き取りやすくする程度の隙間
+
+  if(totalBeats <= 2 + EPS){
+    // 半小節以下の短いコードは、ルート音を目一杯サステインさせるだけにする
+    playBassNote(rootMidi, time, Math.max(0.05, totalBeats * beatSec - GAP));
+    return;
+  }
+
+  // 1小節（4拍）ごとに、前半2拍=ルート、後半2拍=5度、という半音符（ロングトーン）2発のパターンを繰り返す。
+  // 端数小節（例: 1.5小節）にも対応できるよう、小節末尾の残り拍数に応じて長さを調整する。
+  for(let measureStart = 0; measureStart < totalBeats - EPS; measureStart += 4){
+    const remain = Math.min(4, totalBeats - measureStart);
+    const firstLen = Math.min(2, remain);
+    playBassNote(rootMidi, time + measureStart * beatSec, firstLen * beatSec - GAP);
+    if(remain > 2 + EPS){
+      const secondLen = remain - 2;
+      playBassNote(rootMidi + 7, time + (measureStart + 2) * beatSec, secondLen * beatSec - GAP);
+    }
+  }
 }
 
 /* ---- ドラム ---- */
@@ -1000,7 +1046,7 @@ function scheduleMeasure(index, time){
   const chord = progression[index];
   const duration = chordDuration(chord);
   playKeyboardChord(chord, time, duration);
-  playBassForMeasure(chord, time, duration);
+  playBassForMeasure(chord, time);
   scheduleDrumPattern(chord, time);
   scheduleUIUpdate(index, time);
 }
