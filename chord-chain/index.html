@@ -292,6 +292,10 @@
         <label for="octaveSelect">Octave</label>
         <select id="octaveSelect"></select>
       </div>
+      <div class="octave-field" id="drumPatternField">
+        <label for="drumPatternSelect">Drums</label>
+        <select id="drumPatternSelect"></select>
+      </div>
       <button id="addChordBtn">＋ 追加</button>
       <button id="clearBtn">全消去</button>
     </div>
@@ -301,8 +305,13 @@
       <button id="clearSelectionBtn">選択解除</button>
       <span id="clipboardStatus" style="color:var(--muted);font-size:12px;"></span>
     </div>
+    <div class="row" style="margin-top:10px;">
+      <span style="color:var(--muted);font-size:13px;">選択中のコードにドラムパターンを一括適用:</span>
+      <select id="applyDrumPatternSelect"></select>
+      <button id="applyDrumPatternBtn">適用</button>
+    </div>
     <div style="color:var(--muted);font-size:12px;margin-top:6px;">
-      進行リストの小節と小節の間にある「＋」をクリックすると、そこが次の追加位置になります（未クリックなら末尾に追加）。コードそのものをクリックすると選択でき（複数選択可）、よく使う進行パターンを選択してコピー→貼り付けで繰り返し使えます。
+      進行リストの小節と小節の間にある「＋」をクリックすると、そこが次の追加位置になります（未クリックなら末尾に追加）。コードそのものをクリックすると選択でき（複数選択可）、よく使う進行パターンを選択してコピー→貼り付けで繰り返し使えます。複数選択した状態で「ドラムパターンを一括適用」を使うと、選択範囲全体に同じパターンをテンポに正確に合わせて適用できます。
     </div>
     <div style="color:var(--muted);font-size:12px;margin-top:4px;">追加位置: <span id="insertPositionStatus" style="color:var(--accent2);"></span></div>
     <div id="progressionList"></div>
@@ -357,6 +366,95 @@ QUALITIES.forEach(q => {
   opt.value = q.key; opt.textContent = q.label ? `${q.label}` : 'major';
   qualitySelect.appendChild(opt);
 });
+
+/* ===================== ドラムパターン定義 =====================
+   1小節（4拍）を単位としたテンプレート。beat は 0〜4 の拍位置（実テンポ基準）。
+   コードの長さ（bars）が複数小節にまたがる場合はテンプレートを小節ごとに繰り返し、
+   1小節未満（分数小節）の場合はテンプレートのうちその長さに収まる部分だけを鳴らす。
+   これにより、どのコードから見てもテンポ（BPM）に対する実際の音符の長さが変わらず、
+   複数コードにまたがっても一貫した「ノリ」を保てる。
+*/
+const DRUM_PATTERNS = {
+  eighth: {
+    label: '8ビート',
+    hits: [
+      { beat:0,   type:'kick' },
+      { beat:2,   type:'kick' },
+      { beat:3.5, type:'kick' },
+      { beat:1,   type:'snare' },
+      { beat:3,   type:'snare' },
+      { beat:0,   type:'hihat' },
+      { beat:0.5, type:'hihat' },
+      { beat:1,   type:'hihat' },
+      { beat:1.5, type:'hihat' },
+      { beat:2,   type:'hihat' },
+      { beat:2.5, type:'hihat' },
+      { beat:3,   type:'hihat' },
+      { beat:3.5, type:'hihat', open:true },
+    ]
+  },
+  sixteenth: {
+    label: '16ビート',
+    hits: [
+      { beat:0,    type:'kick' },
+      { beat:0.75, type:'kick' },
+      { beat:2,    type:'kick' },
+      { beat:2.75, type:'kick' },
+      { beat:1,    type:'snare' },
+      { beat:3,    type:'snare' },
+      ...Array.from({length:16}, (_, i) => ({ beat: i*0.25, type:'hihat', open: i===15 })),
+    ]
+  },
+  four: {
+    label: '4つ打ち',
+    hits: [
+      { beat:0, type:'kick' },
+      { beat:1, type:'kick' },
+      { beat:2, type:'kick' },
+      { beat:3, type:'kick' },
+      { beat:1, type:'snare' },
+      { beat:3, type:'snare' },
+      { beat:0.5, type:'hihat', open:true },
+      { beat:1.5, type:'hihat', open:true },
+      { beat:2.5, type:'hihat', open:true },
+      { beat:3.5, type:'hihat', open:true },
+    ]
+  },
+  ballad: {
+    label: 'バラード',
+    hits: [
+      { beat:0, type:'kick' },
+      { beat:2, type:'kick' },
+      { beat:1, type:'snare' },
+      { beat:3, type:'snare' },
+      { beat:0, type:'hihat' },
+      { beat:1, type:'hihat' },
+      { beat:2, type:'hihat' },
+      { beat:3, type:'hihat' },
+    ]
+  },
+  none: {
+    label: 'ドラムなし',
+    hits: []
+  }
+};
+const DRUM_PATTERN_ORDER = ['eighth','sixteenth','four','ballad','none'];
+const DEFAULT_DRUM_PATTERN = 'eighth';
+
+function populateDrumPatternSelect(selectEl){
+  DRUM_PATTERN_ORDER.forEach(key => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = DRUM_PATTERNS[key].label;
+    selectEl.appendChild(opt);
+  });
+}
+const drumPatternSelect = document.getElementById('drumPatternSelect');
+const applyDrumPatternSelect = document.getElementById('applyDrumPatternSelect');
+populateDrumPatternSelect(drumPatternSelect);
+populateDrumPatternSelect(applyDrumPatternSelect);
+drumPatternSelect.value = DEFAULT_DRUM_PATTERN;
+applyDrumPatternSelect.value = DEFAULT_DRUM_PATTERN;
 
 /* ===================== 進行の入力欄 ===================== */
 const barsInputEl = document.getElementById('barsInput');
@@ -531,7 +629,9 @@ function renderProgression(highlightIndex = -1){
     chip.className = 'chip' + (i === highlightIndex ? ' playing' : '') + (selectedIndices.has(i) ? ' selected' : '');
     const barsBadge = (chord.bars !== 1) ? `<span class="bars">${chord.barsDisplay}小節</span>` : '';
     const octaveBadge = (chord.octave) ? `<span class="octave">${chord.octave > 0 ? '+' : ''}${chord.octave}oct</span>` : '';
-    chip.innerHTML = `<span class="idx">${i+1}</span><span>${chordLabel(chord)}</span>${barsBadge}${octaveBadge}`;
+    const patternKey = chord.drumPattern || DEFAULT_DRUM_PATTERN;
+    const drumBadge = (patternKey !== DEFAULT_DRUM_PATTERN) ? `<span class="octave">${DRUM_PATTERNS[patternKey].label}</span>` : '';
+    chip.innerHTML = `<span class="idx">${i+1}</span><span>${chordLabel(chord)}</span>${barsBadge}${octaveBadge}${drumBadge}`;
     chip.onclick = () => {
       if(selectedIndices.has(i)){
         selectedIndices.delete(i);
@@ -606,6 +706,18 @@ clearSelectionBtn.onclick = () => {
   updateClipboardStatus();
 };
 
+document.getElementById('applyDrumPatternBtn').onclick = () => {
+  if(selectedIndices.size === 0){
+    alert('ドラムパターンを適用するコードを進行リストからクリックして選択してください（複数選択可）。');
+    return;
+  }
+  const patternKey = applyDrumPatternSelect.value;
+  selectedIndices.forEach(i => {
+    progression[i].drumPattern = patternKey;
+  });
+  renderProgression(displayedIndex);
+};
+
 document.getElementById('addChordBtn').onclick = () => {
   const parsed = parseBars(barsInputEl.value);
   if(parsed === null){
@@ -615,7 +727,8 @@ document.getElementById('addChordBtn').onclick = () => {
   const bars = parsed;
   const barsDisplay = barsInputEl.value.trim();
   const octave = parseInt(octaveSelectEl.value, 10) || 0;
-  const newChord = { root: rootSelect.value, qualityKey: qualitySelect.value, bars, barsDisplay, octave };
+  const drumPattern = drumPatternSelect.value || DEFAULT_DRUM_PATTERN;
+  const newChord = { root: rootSelect.value, qualityKey: qualitySelect.value, bars, barsDisplay, octave, drumPattern };
   const wasDefault = (insertGapIndex === null);
   const insertIndex = computeInsertIndex();
   progression.splice(insertIndex, 0, newChord);
@@ -841,21 +954,27 @@ function playHihat(time, open=false){
   trackNode(noise);
 }
 
-function playDrumsForMeasure(time, duration){
-  // duration は1小節（4拍）分とは限らないため、4等分した長さを「拍相当」として使う。
-  // bars=1（通常の1小節=4拍）のときは従来と全く同じ挙動になる。
-  const beat = duration / 4;
-  const eighth = beat / 2;
-  // キック: 1拍目, 3拍目の裏
-  playKick(time);
-  playKick(time + beat*2.5*0 + beat*2); // 3拍目
-  playKick(time + beat*3 + eighth);     // 4拍目の裏（ロックらしいシンコペーション）
-  // スネア: 2拍目, 4拍目
-  playSnare(time + beat);
-  playSnare(time + beat*3);
-  // ハイハット: 8分刻み
-  for(let i=0;i<8;i++){
-    playHihat(time + eighth*i, i===7);
+// chord.drumPattern に応じたパターンを、実テンポ（secondsPerBeat）を基準に鳴らす。
+// duration ではなく実拍（bars*4拍）を使うため、コードの長さが変わっても
+// ハイハットなどの音符の実際の長さ（テンポ感）は常に一定に保たれる。
+// 1小節分のテンプレートを、コードの長さ（何拍分か）が尽きるまで繰り返し適用する。
+function scheduleDrumPattern(chord, time){
+  const patternKey = chord.drumPattern || DEFAULT_DRUM_PATTERN;
+  const pattern = DRUM_PATTERNS[patternKey] || DRUM_PATTERNS[DEFAULT_DRUM_PATTERN];
+  if(!pattern.hits.length) return;
+  const beatSec = secondsPerBeat();
+  const totalBeats = (chord.bars || 1) * 4;
+  const EPS = 1e-6;
+  for(let measureStart = 0; measureStart < totalBeats - EPS; measureStart += 4){
+    pattern.hits.forEach(hit => {
+      const beatPos = measureStart + hit.beat;
+      if(beatPos < totalBeats - EPS){
+        const t = time + beatPos * beatSec;
+        if(hit.type === 'kick') playKick(t);
+        else if(hit.type === 'snare') playSnare(t);
+        else if(hit.type === 'hihat') playHihat(t, !!hit.open);
+      }
+    });
   }
 }
 
@@ -882,7 +1001,7 @@ function scheduleMeasure(index, time){
   const duration = chordDuration(chord);
   playKeyboardChord(chord, time, duration);
   playBassForMeasure(chord, time, duration);
-  playDrumsForMeasure(time, duration);
+  scheduleDrumPattern(chord, time);
   scheduleUIUpdate(index, time);
 }
 
@@ -935,6 +1054,24 @@ function stopPlayback(){
 
 playBtn.onclick = startPlayback;
 stopBtn.onclick = stopPlayback;
+
+/* ---- Space キーで再生/停止をトグル ---- */
+document.addEventListener('keydown', (e) => {
+  if(e.code !== 'Space' && e.key !== ' ') return;
+
+  // フォーム要素にフォーカスがある場合は、通常のスペース入力（文字入力・選択操作）を優先する
+  const target = e.target;
+  const tag = target.tagName;
+  const isFormField = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || target.isContentEditable;
+  if(isFormField) return;
+
+  e.preventDefault(); // ページのスクロールを防止
+  if(isPlaying){
+    stopPlayback();
+  } else if(!playBtn.disabled){
+    startPlayback();
+  }
+});
 </script>
 </body>
 </html>
