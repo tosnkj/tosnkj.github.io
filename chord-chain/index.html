@@ -851,6 +851,7 @@ let currentChordIndex = 0;
 let nextNoteTime = 0.0;
 let schedulerTimerId = null;
 let activeNodes = []; // { stop() } を持つノードを記録し、即時停止に使う
+let drumPhaseBeats = 0; // 4拍サイクルの中で「今どの拍位置か」。コードが変わってもリセットせず、途切れず進み続ける。
 
 function ensureAudioContext(){
   if(!audioCtx){
@@ -1032,27 +1033,38 @@ function playHihat(time, open=false){
 }
 
 // chord.drumPattern に応じたパターンを、実テンポ（secondsPerBeat）を基準に鳴らす。
-// duration ではなく実拍（bars*4拍）を使うため、コードの長さが変わっても
-// ハイハットなどの音符の実際の長さ（テンポ感）は常に一定に保たれる。
-// 1小節分のテンプレートを、コードの長さ（何拍分か）が尽きるまで繰り返し適用する。
+// 重要: パターンの「拍0」は曲頭からの4拍サイクル（drumPhaseBeats）に対して連続しており、
+// コードが変わるたびにパターンを拍0からリセットすることはしない。
+// そうしないと、1拍未満の短いコードが連続する進行では、コードが切り替わるたびに
+// 強制的にキック（テンプレートの拍0）が鳴ってしまい、本来のリズムが崩れて不自然に聞こえる。
 function scheduleDrumPattern(chord, time){
   const patternKey = chord.drumPattern || DEFAULT_DRUM_PATTERN;
   const pattern = DRUM_PATTERNS[patternKey] || DRUM_PATTERNS[DEFAULT_DRUM_PATTERN];
-  if(!pattern.hits.length) return;
   const beatSec = secondsPerBeat();
   const totalBeats = (chord.bars || 1) * 4;
   const EPS = 1e-6;
-  for(let measureStart = 0; measureStart < totalBeats - EPS; measureStart += 4){
-    pattern.hits.forEach(hit => {
-      const beatPos = measureStart + hit.beat;
-      if(beatPos < totalBeats - EPS){
-        const t = time + beatPos * beatSec;
-        if(hit.type === 'kick') playKick(t);
-        else if(hit.type === 'snare') playSnare(t);
-        else if(hit.type === 'hihat') playHihat(t, !!hit.open);
-      }
-    });
+  const phase = drumPhaseBeats; // このコードの先頭が、4拍サイクルの中のどの位置に当たるか
+
+  if(pattern.hits.length){
+    // テンプレートは0〜4拍の1サイクル分。phase 〜 phase+totalBeats の範囲に含まれる
+    // ヒットを、サイクルをまたいで（+4の倍数して）拾い出す。
+    const startCycle = Math.floor(phase / 4);
+    const endCycle = Math.floor((phase + totalBeats - EPS) / 4);
+    for(let cycle = startCycle; cycle <= endCycle; cycle++){
+      pattern.hits.forEach(hit => {
+        const beatPos = cycle * 4 + hit.beat; // 曲頭からの連続した拍位置
+        if(beatPos >= phase - EPS && beatPos < phase + totalBeats - EPS){
+          const t = time + (beatPos - phase) * beatSec;
+          if(hit.type === 'kick') playKick(t);
+          else if(hit.type === 'snare') playSnare(t);
+          else if(hit.type === 'hihat') playHihat(t, !!hit.open);
+        }
+      });
+    }
   }
+
+  // 次のコードのために位相を進める。これにより4拍サイクルはコード境界を越えて途切れず続く。
+  drumPhaseBeats = (phase + totalBeats) % 4;
 }
 
 /* ---- UI 同期表示 ---- */
@@ -1108,6 +1120,7 @@ function startPlayback(){
   currentChordIndex = 0;
   nextNoteTime = audioCtx.currentTime + 0.15;
   activeNodes = [];
+  drumPhaseBeats = 0; // 再生開始のたびに、ドラムの4拍サイクルを頭から揃える
   playBtn.disabled = true;
   stopBtn.disabled = false;
   scheduler();
