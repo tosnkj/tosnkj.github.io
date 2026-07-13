@@ -333,6 +333,30 @@
       <div class="transport">
         <button id="playBtn">▶ 再生（無限ループ）</button>
         <button id="stopBtn" disabled>■ 停止</button>
+        <button id="exportBtn">進行をエクスポート</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="exportPanel" style="display:none;">
+    <h2>コード進行のエクスポート</h2>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:10px;">
+      下のテキストをコピーして、フィードバックと一緒に貼り付けてください。
+    </div>
+    <div class="row" style="align-items:flex-start;">
+      <div style="flex:1;min-width:260px;">
+        <div class="row" style="justify-content:space-between;margin-bottom:4px;">
+          <label style="font-size:13px;color:var(--muted);">読みやすい形式（テキスト）</label>
+          <button id="copyExportTextBtn">コピー</button>
+        </div>
+        <textarea id="exportTextArea" readonly style="width:100%;height:160px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;font-family:monospace;"></textarea>
+      </div>
+      <div style="flex:1;min-width:260px;">
+        <div class="row" style="justify-content:space-between;margin-bottom:4px;">
+          <label style="font-size:13px;color:var(--muted);">JSON形式（そのまま再利用したい場合）</label>
+          <button id="copyExportJsonBtn">コピー</button>
+        </div>
+        <textarea id="exportJsonArea" readonly style="width:100%;height:160px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;font-family:monospace;"></textarea>
       </div>
     </div>
   </div>
@@ -1100,6 +1124,80 @@ function stopPlayback(){
 
 playBtn.onclick = startPlayback;
 stopBtn.onclick = stopPlayback;
+
+/* ===================== エクスポート ===================== */
+const exportBtn = document.getElementById('exportBtn');
+const exportPanel = document.getElementById('exportPanel');
+const exportTextArea = document.getElementById('exportTextArea');
+const exportJsonArea = document.getElementById('exportJsonArea');
+const copyExportTextBtn = document.getElementById('copyExportTextBtn');
+const copyExportJsonBtn = document.getElementById('copyExportJsonBtn');
+
+// 人が読みやすい一覧テキストを作る（フィードバックをそのまま伝えられる形式）
+function buildExportText(){
+  const lines = [];
+  lines.push(`Key: ${songKey ? songKey : '未設定'}`);
+  lines.push(`Tempo: ${bpm} BPM`);
+  lines.push(`Volume: ${Math.round(masterVolume * 100)}%`);
+  lines.push('');
+  if(progression.length === 0){
+    lines.push('（コードがまだ追加されていません）');
+  }else{
+    progression.forEach((chord, i) => {
+      const barsText = `${chord.barsDisplay}小節`;
+      const octaveText = chord.octave ? `${chord.octave > 0 ? '+' : ''}${chord.octave}oct` : '±0oct';
+      const patternKey = chord.drumPattern || DEFAULT_DRUM_PATTERN;
+      const drumText = DRUM_PATTERNS[patternKey].label;
+      lines.push(`${i+1}. ${chordLabel(chord)}  (${barsText}, ${octaveText}, ${drumText})`);
+    });
+  }
+  return lines.join('\n');
+}
+
+// そのままの状態を保持できるJSON（再利用・復元のための構造化データ）
+function buildExportJson(){
+  const data = {
+    songKey,
+    bpm,
+    masterVolumePercent: Math.round(masterVolume * 100),
+    progression: progression.map(chord => ({
+      root: chord.root,
+      qualityKey: chord.qualityKey,
+      bars: chord.bars,
+      barsDisplay: chord.barsDisplay,
+      octave: chord.octave,
+      drumPattern: chord.drumPattern || DEFAULT_DRUM_PATTERN,
+    })),
+  };
+  return JSON.stringify(data, null, 2);
+}
+
+function refreshExportPanel(){
+  exportTextArea.value = buildExportText();
+  exportJsonArea.value = buildExportJson();
+}
+
+exportBtn.onclick = () => {
+  refreshExportPanel();
+  exportPanel.style.display = exportPanel.style.display === 'none' ? 'block' : 'none';
+};
+
+// クリップボードへのコピー。失敗時（非対応環境など）はテキストを選択状態にして手動コピーを促す。
+async function copyTextareaContent(textarea, btn){
+  const originalLabel = btn.textContent;
+  try{
+    await navigator.clipboard.writeText(textarea.value);
+    btn.textContent = 'コピーしました';
+  }catch(e){
+    textarea.focus();
+    textarea.select();
+    btn.textContent = '選択したのでCtrl+Cでコピー';
+  }
+  setTimeout(() => { btn.textContent = originalLabel; }, 1800);
+}
+
+copyExportTextBtn.onclick = () => copyTextareaContent(exportTextArea, copyExportTextBtn);
+copyExportJsonBtn.onclick = () => copyTextareaContent(exportJsonArea, copyExportJsonBtn);
 
 /* ---- Space キーで再生/停止をトグル ---- */
 document.addEventListener('keydown', (e) => {
