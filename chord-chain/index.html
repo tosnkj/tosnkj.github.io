@@ -882,6 +882,15 @@ function createNoiseBuffer(duration){
 
 function trackNode(node){
   activeNodes.push(node);
+  // 再生が終わったノードを自動的に配列から取り除く。
+  // これをしないと、ループ再生中に鳴り終わったノードの参照がいつまでも
+  // activeNodes に残り続け、ガベージコレクションされずにメモリを圧迫し続ける。
+  // （長時間ループ再生していると音がブツブツ途切れた末に無音になる不具合の原因だった）
+  const cleanup = () => {
+    const idx = activeNodes.indexOf(node);
+    if(idx !== -1) activeNodes.splice(idx, 1);
+  };
+  node.addEventListener('ended', cleanup, { once: true });
   return node;
 }
 
