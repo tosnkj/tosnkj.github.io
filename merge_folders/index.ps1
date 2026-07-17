@@ -6,13 +6,25 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# ----- すべてのダイアログの「親」となる、見えない最前面ウィンドウ -----
+# これを各ダイアログのOwnerに指定することで、フォルダ選択後に次のウィンドウが
+# 他のアプリ（エクスプローラーやChromeなど）の裏に隠れてしまう現象を防ぐ。
+$ownerForm = New-Object System.Windows.Forms.Form
+$ownerForm.StartPosition = "Manual"
+$ownerForm.Location = New-Object System.Drawing.Point(-2000, -2000)
+$ownerForm.Size = New-Object System.Drawing.Size(1, 1)
+$ownerForm.ShowInTaskbar = $false
+$ownerForm.TopMost = $true
+$ownerForm.Show()
+$ownerForm.Hide()
+
 # ----- 親フォルダの中のサブフォルダを一覧表示し、複数選択させる独自ダイアログ -----
 # ListBoxのMultiExtendedモードを使うため、Shift（範囲選択）・Ctrl（個別選択）が安定して動作する。
 function Select-SubFolders($parentPath) {
     $subfolders = Get-ChildItem -Path $parentPath -Directory -ErrorAction SilentlyContinue | Sort-Object Name
 
     if ($subfolders.Count -eq 0) {
-        [System.Windows.Forms.MessageBox]::Show("このフォルダの中にサブフォルダが見つかりませんでした。`n$parentPath", "確認") | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($ownerForm, "このフォルダの中にサブフォルダが見つかりませんでした。`n$parentPath", "確認") | Out-Null
         return @()
     }
 
@@ -22,6 +34,7 @@ function Select-SubFolders($parentPath) {
     $form.StartPosition = "CenterScreen"
     $form.MinimizeBox = $false
     $form.MaximizeBox = $false
+    $form.TopMost = $true
 
     $label = New-Object System.Windows.Forms.Label
     $label.Text = "対象フォルダ: $parentPath"
@@ -56,7 +69,7 @@ function Select-SubFolders($parentPath) {
     $form.Controls.Add($cancelButton)
     $form.CancelButton = $cancelButton
 
-    $result = $form.ShowDialog()
+    $result = $form.ShowDialog($ownerForm)
 
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
         $selected = @()
@@ -74,7 +87,7 @@ function Select-Folder($description) {
     $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
     $dialog.Description = $description
     $dialog.ShowNewFolderButton = $true
-    $result = $dialog.ShowDialog()
+    $result = $dialog.ShowDialog($ownerForm)
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
         return $dialog.SelectedPath
     } else {
@@ -87,6 +100,7 @@ $sourceFolders = @()
 $continue = $true
 
 [System.Windows.Forms.MessageBox]::Show(
+    $ownerForm,
     "これから、ファイルをまとめたい元フォルダを選択します。`n`nまず、それらのフォルダが入っている『親フォルダ』を選んでください。次の画面で、その中身を一覧からShift/Ctrlキーで複数選択できます。",
     "フォルダ統合ツール",
     [System.Windows.Forms.MessageBoxButtons]::OK,
@@ -97,7 +111,7 @@ while ($continue) {
     $parentFolder = Select-Folder("まとめたいフォルダが入っている『親フォルダ』を選んでください")
     if ($parentFolder -eq $null) {
         if ($sourceFolders.Count -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show("フォルダが選択されませんでした。処理を終了します。")
+            [System.Windows.Forms.MessageBox]::Show($ownerForm, "フォルダが選択されませんでした。処理を終了します。")
             exit
         }
         break
@@ -109,7 +123,7 @@ while ($continue) {
         $sourceFolders += $folders
     } else {
         if ($sourceFolders.Count -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show("フォルダが選択されませんでした。処理を終了します。")
+            [System.Windows.Forms.MessageBox]::Show($ownerForm, "フォルダが選択されませんでした。処理を終了します。")
             exit
         }
         $continue = $false
@@ -117,6 +131,7 @@ while ($continue) {
     }
 
     $more = [System.Windows.Forms.MessageBox]::Show(
+        $ownerForm,
         "他の場所にあるフォルダも追加しますか？`n（現在 $($sourceFolders.Count) 個選択済み）",
         "確認",
         [System.Windows.Forms.MessageBoxButtons]::YesNo,
@@ -131,6 +146,7 @@ $sourceFolders = $sourceFolders | Select-Object -Unique
 
 # ----- 2. コピー先フォルダを選択 -----
 [System.Windows.Forms.MessageBox]::Show(
+    $ownerForm,
     "次に、まとめ先のフォルダを選択（または新規作成）してください。",
     "フォルダ統合ツール",
     [System.Windows.Forms.MessageBoxButtons]::OK,
@@ -139,12 +155,13 @@ $sourceFolders = $sourceFolders | Select-Object -Unique
 
 $destFolder = Select-Folder("まとめ先のフォルダを選択してください（新規作成ボタンあり）")
 if ($destFolder -eq $null) {
-    [System.Windows.Forms.MessageBox]::Show("まとめ先フォルダが選択されませんでした。処理を終了します。")
+    [System.Windows.Forms.MessageBox]::Show($ownerForm, "まとめ先フォルダが選択されませんでした。処理を終了します。")
     exit
 }
 
 # ----- 3. サブフォルダも含めるか確認 -----
 $includeSub = [System.Windows.Forms.MessageBox]::Show(
+    $ownerForm,
     "各フォルダの中のサブフォルダのファイルも含めますか？",
     "確認",
     [System.Windows.Forms.MessageBoxButtons]::YesNo,
@@ -199,7 +216,10 @@ if ($errorList.Count -gt 0) {
     $message += "`n`n--- エラー ---`n" + ($errorList -join "`n")
 }
 
-[System.Windows.Forms.MessageBox]::Show($message, "処理結果", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+[System.Windows.Forms.MessageBox]::Show($ownerForm, $message, "処理結果", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
 
 # エクスプローラーでまとめ先フォルダを開く
 Start-Process explorer.exe $destFolder
+
+# 見えない親ウィンドウを片付ける
+$ownerForm.Close()
