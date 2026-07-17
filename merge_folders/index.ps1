@@ -1,4 +1,4 @@
-﻿# ===================================================
+# ===================================================
 # 複数フォルダのファイルを1つのフォルダにまとめるツール
 # （Shift/Ctrlキーで複数フォルダを一括選択可能）
 # ===================================================
@@ -18,6 +18,23 @@ $ownerForm.TopMost = $true
 $ownerForm.Show()
 $ownerForm.Hide()
 
+# ----- 完了を音声で知らせる関数 -----
+# 日本語の音声合成エンジンが入っていればそれを使って読み上げ、
+# 入っていない・失敗した場合は代わりに通知音を鳴らす。
+function Announce-Completion($message) {
+    try {
+        Add-Type -AssemblyName System.Speech -ErrorAction Stop
+        $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+        $japaneseVoice = $synth.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Culture.Name -like "ja*" } | Select-Object -First 1
+        if ($japaneseVoice) {
+            $synth.SelectVoice($japaneseVoice.VoiceInfo.Name)
+        }
+        $synth.Speak($message)
+    } catch {
+        [System.Media.SystemSounds]::Asterisk.Play()
+        Start-Sleep -Milliseconds 800
+    }
+}
 # ----- 親フォルダの中のサブフォルダを一覧表示し、複数選択させる独自ダイアログ -----
 # ListBoxのMultiExtendedモードを使うため、Shift（範囲選択）・Ctrl（個別選択）が安定して動作する。
 function Select-SubFolders($parentPath) {
@@ -215,6 +232,8 @@ $message = "完了しました。`n`n選択したフォルダ数: $($sourceFolde
 if ($errorList.Count -gt 0) {
     $message += "`n`n--- エラー ---`n" + ($errorList -join "`n")
 }
+
+Announce-Completion("フォルダの統合が完了しました。$copiedCount 個のファイルをコピーしました。")
 
 [System.Windows.Forms.MessageBox]::Show($ownerForm, $message, "処理結果", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
 
