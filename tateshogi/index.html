@@ -250,9 +250,9 @@
   .koma.sente { transform: rotate(0deg); }
   .koma.gote  { transform: rotate(180deg); }
 
-  /* 盤面反転時の駒の向き制御（手前が常に正対する） */
-  .board.flipped .koma.sente { transform: rotate(180deg); }
-  .board.flipped .koma.gote  { transform: rotate(0deg); }
+  /* 【修正箇所】盤面反転時の駒の向き制御（手前側の駒が常に上を向くように修正） */
+  .board.flipped .koma.sente { transform: rotate(0deg); }
+  .board.flipped .koma.gote  { transform: rotate(180deg); }
 
   .koma .kanji {
     font-family: var(--serif);
@@ -393,7 +393,6 @@
     </div>
   </div>
 
-  <!-- 操作メニューに「盤面反転」ボタンを追加 -->
   <div class="controls">
     <button class="ui-btn accent-btn" id="btnFlip">盤面反転 🔄</button>
     <button class="ui-btn" id="btnRules">遊び方</button>
@@ -752,7 +751,6 @@ function newGame(){
   cpuThinking = false;
   legalMoves = generateAllLegalMoves(board, hands, turn);
   
-  // 自動回転ロジックは撤廃し、開始時は常に通常表示（初期状態）にします
   const bd = document.getElementById('board');
   const gc = document.getElementById('gameContainer');
   bd.classList.remove('flipped');
@@ -1039,7 +1037,6 @@ document.getElementById('sideGote').addEventListener('click', () => {
   newGame();
 });
 
-// 縮小スライダーの制御
 const zoomSlider = document.getElementById('zoomSlider');
 const zoomVal = document.getElementById('zoomVal');
 
@@ -1049,7 +1046,6 @@ zoomSlider.addEventListener('input', (e) => {
   zoomVal.textContent = Math.round(val * 100) + '%';
 });
 
-// 手動で「盤面反転 🔄」ボタンを押したときのトグル処理
 document.getElementById('btnFlip').addEventListener('click', () => {
   const bd = document.getElementById('board');
   const gc = document.getElementById('gameContainer');
