@@ -26,7 +26,6 @@
     --serif: "Hiragino Mincho ProN","Yu Mincho","Noto Serif JP", serif;
     --sans: "Hiragino Kaku Gothic ProN","Yu Gothic Medium","Noto Sans JP", sans-serif;
     
-    /* ズーム倍率の初期値（JavaScriptから可変にします） */
     --board-zoom: 1.0; 
   }
 
@@ -51,6 +50,18 @@
     gap: 8px;
   }
 
+  /* 後手番の時にアプリ全体のメイン要素を上下反転する構造 */
+  .game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+  .game-container.flipped {
+    flex-direction: column-reverse; /* 持ち駒（先手・後手）の表示位置を逆転 */
+  }
+
   header { text-align: center; margin-bottom: 2px; }
 
   h1 {
@@ -70,7 +81,6 @@
     color: var(--muted);
   }
 
-  /* ズーム操作パネル */
   .zoom-control {
     display: flex;
     align-items: center;
@@ -192,13 +202,19 @@
   }
   .board {
     display: grid;
-    /* 元の clamp 計算にズーム倍率を乗算 */
     grid-template-columns: repeat(3, calc(clamp(48px, 20vw, 75px) * var(--board-zoom)));
     grid-template-rows: repeat(9, calc(clamp(48px, 18vw, 75px) * var(--board-zoom)));
     gap: 0;
     background: var(--wood-line);
     border: 2px solid var(--wood-line);
+    transition: transform 0.3s ease;
   }
+  
+  /* 後手番の時に盤面自体を180度回転 */
+  .board.flipped {
+    transform: rotate(180deg);
+  }
+
   .cell {
     position: relative;
     background: linear-gradient(160deg, var(--wood-1), var(--wood-2));
@@ -228,16 +244,21 @@
     clip-path: polygon(50% 0%, 92% 24%, 100% 100%, 0% 100%, 8% 24%);
     background: linear-gradient(160deg, #fbf4e4, var(--piece-sente) 55%, #e7d9b8);
     box-shadow: 0 2px 3px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.12);
+    transition: transform 0.3s ease;
   }
-  .koma.gote {
-    background: linear-gradient(160deg, #ece4cf, var(--piece-gote) 55%, #d3c6a5);
-    transform: rotate(180deg);
-  }
+  
+  /* 通常時の向き */
+  .koma.sente { transform: rotate(0deg); }
+  .koma.gote  { transform: rotate(180deg); }
+
+  /* 後手番（盤面反転時）の駒の向き制御 */
+  .board.flipped .koma.sente { transform: rotate(180deg); }
+  .board.flipped .koma.gote  { transform: rotate(0deg); }
+
   .koma .kanji {
     font-family: var(--serif);
     font-weight: 700;
     color: var(--piece-ink);
-    /* 文字サイズもズームに合わせて伸縮 */
     font-size: calc(clamp(18px, 5.5vw, 24px) * var(--board-zoom));
     line-height: 1;
     transform: translateY(2px);
@@ -343,28 +364,31 @@
     <p class="subtitle">3列×9段 ・ 王 / 金 / 歩だけで遊ぶミニ将棋</p>
   </header>
 
-  <!-- 画面サイズ変更用のスライダーパネルを追加 -->
+  <!-- 1. 最小値を 0.5 (50%) に変更 -->
   <div class="zoom-control">
     <span>画面縮小</span>
-    <input type="range" id="zoomSlider" min="0.8" max="1.2" step="0.05" value="1.0">
+    <input type="range" id="zoomSlider" min="0.5" max="1.2" step="0.05" value="1.0">
     <span>拡大</span>
     <span class="zoom-val" id="zoomVal">100%</span>
   </div>
 
   <div class="status-bar" id="statusBar"></div>
 
-  <div class="hand" id="handGote">
-    <span class="hand-label">後手</span>
-    <div class="hand-pieces" id="handGotePieces"></div>
-  </div>
+  <!-- 反転制御用のコンテナで包む -->
+  <div class="game-container" id="gameContainer">
+    <div class="hand" id="handGote">
+      <span class="hand-label">後手</span>
+      <div class="hand-pieces" id="handGotePieces"></div>
+    </div>
 
-  <div class="board-wrap">
-    <div class="board" id="board"></div>
-  </div>
+    <div class="board-wrap">
+      <div class="board" id="board"></div>
+    </div>
 
-  <div class="hand" id="handSente">
-    <span class="hand-label">先手</span>
-    <div class="hand-pieces" id="handSentePieces"></div>
+    <div class="hand" id="handSente">
+      <span class="hand-label">先手</span>
+      <div class="hand-pieces" id="handSentePieces"></div>
+    </div>
   </div>
 
   <div class="controls">
@@ -450,7 +474,7 @@
 <script>
 /* =====================================================================
    3x9 mini shogi engine  (King / Gold / Pawn only)
-   ==================================================================== */
+   ===================================================================== */
 const ROWS = 9, COLS = 3;
 
 function makeInitialBoard() {
@@ -723,6 +747,18 @@ function newGame(){
   pendingChoices = null;
   cpuThinking = false;
   legalMoves = generateAllLegalMoves(board, hands, turn);
+  
+  // 2. 後手番選択時に上下反転クラスを適用する制御
+  const bd = document.getElementById('board');
+  const gc = document.getElementById('gameContainer');
+  if (gameMode === 'cpu' && humanSide === 'gote') {
+    bd.classList.add('flipped');
+    gc.classList.add('flipped');
+  } else {
+    bd.classList.remove('flipped');
+    gc.classList.remove('flipped');
+  }
+
   hideModal(document.getElementById('gameOverModal'));
   hideModal(document.getElementById('promoModal'));
   renderAll();
@@ -807,7 +843,7 @@ function renderHand(owner){
       slot.className += ' selected';
     }
     const koma = document.createElement('div');
-    koma.className = 'komaface koma' + (owner==='gote' ? ' gote' : '');
+    koma.className = 'komaface koma ' + owner; // 駒クラスにsente/goteの所有権を追加
     const kanji = document.createElement('span');
     kanji.className = 'kanji';
     kanji.textContent = t === 'G' ? '金' : '歩';
@@ -854,7 +890,7 @@ function renderBoard(){
 
       if (piece){
         const koma = document.createElement('div');
-        koma.className = 'koma' + (piece.owner==='gote' ? ' gote' : '') + (piece.type==='P' && piece.promoted ? ' promoted' : '') + (piece.type==='K' ? ' is-king' : '');
+        koma.className = 'koma ' + piece.owner + (piece.type==='P' && piece.promoted ? ' promoted' : '') + (piece.type==='K' ? ' is-king' : '');
         const kanji = document.createElement('span');
         kanji.className = 'kanji';
         kanji.textContent = label(piece);
@@ -1004,18 +1040,15 @@ document.getElementById('sideGote').addEventListener('click', () => {
   newGame();
 });
 
-/* --- ズーム機能のイベントリスナーを追加 --- */
 const zoomSlider = document.getElementById('zoomSlider');
 const zoomVal = document.getElementById('zoomVal');
 
 zoomSlider.addEventListener('input', (e) => {
   const val = e.target.value;
-  // CSSのカスタム変数（--board-zoom）を書き換えて一括変化
   document.documentElement.style.setProperty('--board-zoom', val);
   zoomVal.textContent = Math.round(val * 100) + '%';
 });
 
-/* On first load, ask the player which mode to play before starting. */
 showModal(document.getElementById('modeModal'));
 
 </script>
