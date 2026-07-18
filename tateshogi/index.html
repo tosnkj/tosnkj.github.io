@@ -50,7 +50,7 @@
     gap: 8px;
   }
 
-  /* 後手番の時にアプリ全体のメイン要素を上下反転する構造 */
+  /* 盤面反転ボタン用のコンテナスタイル */
   .game-container {
     display: flex;
     flex-direction: column;
@@ -210,7 +210,7 @@
     transition: transform 0.3s ease;
   }
   
-  /* 後手番の時に盤面自体を180度回転 */
+  /* ボタン押下で手動反転させるクラス */
   .board.flipped {
     transform: rotate(180deg);
   }
@@ -247,11 +247,10 @@
     transition: transform 0.3s ease;
   }
   
-  /* 通常時の向き */
   .koma.sente { transform: rotate(0deg); }
   .koma.gote  { transform: rotate(180deg); }
 
-  /* 後手番（盤面反転時）の駒の向き制御 */
+  /* 盤面反転時の駒の向き制御（手前が常に正対する） */
   .board.flipped .koma.sente { transform: rotate(180deg); }
   .board.flipped .koma.gote  { transform: rotate(0deg); }
 
@@ -269,8 +268,11 @@
   /* ---------- controls / rules ---------- */
   .controls {
     display: flex;
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
     margin-top: 4px;
+    justify-content: center;
+    width: 100%;
   }
   button.ui-btn {
     font-family: var(--sans);
@@ -288,6 +290,8 @@
   button.ui-btn:active { transform: translateY(1px); }
   button.ui-btn.primary { background: var(--accent); border-color: var(--accent); }
   button.ui-btn.primary:hover { background: #c34a37; }
+  button.ui-btn.accent-btn { background: var(--gold-highlight); border-color: var(--gold-highlight); color: var(--ink); font-weight: bold; }
+  button.ui-btn.accent-btn:hover { background: #dfad4f; }
 
   .rules-panel {
     width: 100%;
@@ -364,7 +368,6 @@
     <p class="subtitle">3列×9段 ・ 王 / 金 / 歩だけで遊ぶミニ将棋</p>
   </header>
 
-  <!-- 1. 最小値を 0.5 (50%) に変更 -->
   <div class="zoom-control">
     <span>画面縮小</span>
     <input type="range" id="zoomSlider" min="0.5" max="1.2" step="0.05" value="1.0">
@@ -374,7 +377,6 @@
 
   <div class="status-bar" id="statusBar"></div>
 
-  <!-- 反転制御用のコンテナで包む -->
   <div class="game-container" id="gameContainer">
     <div class="hand" id="handGote">
       <span class="hand-label">後手</span>
@@ -391,7 +393,9 @@
     </div>
   </div>
 
+  <!-- 操作メニューに「盤面反転」ボタンを追加 -->
   <div class="controls">
+    <button class="ui-btn accent-btn" id="btnFlip">盤面反転 🔄</button>
     <button class="ui-btn" id="btnRules">遊び方</button>
     <button class="ui-btn" id="btnRestart">はじめから</button>
     <button class="ui-btn" id="btnMode">対戦モード</button>
@@ -748,16 +752,11 @@ function newGame(){
   cpuThinking = false;
   legalMoves = generateAllLegalMoves(board, hands, turn);
   
-  // 2. 後手番選択時に上下反転クラスを適用する制御
+  // 自動回転ロジックは撤廃し、開始時は常に通常表示（初期状態）にします
   const bd = document.getElementById('board');
   const gc = document.getElementById('gameContainer');
-  if (gameMode === 'cpu' && humanSide === 'gote') {
-    bd.classList.add('flipped');
-    gc.classList.add('flipped');
-  } else {
-    bd.classList.remove('flipped');
-    gc.classList.remove('flipped');
-  }
+  bd.classList.remove('flipped');
+  gc.classList.remove('flipped');
 
   hideModal(document.getElementById('gameOverModal'));
   hideModal(document.getElementById('promoModal'));
@@ -843,7 +842,7 @@ function renderHand(owner){
       slot.className += ' selected';
     }
     const koma = document.createElement('div');
-    koma.className = 'komaface koma ' + owner; // 駒クラスにsente/goteの所有権を追加
+    koma.className = 'komaface koma ' + owner; 
     const kanji = document.createElement('span');
     kanji.className = 'kanji';
     kanji.textContent = t === 'G' ? '金' : '歩';
@@ -1040,6 +1039,7 @@ document.getElementById('sideGote').addEventListener('click', () => {
   newGame();
 });
 
+// 縮小スライダーの制御
 const zoomSlider = document.getElementById('zoomSlider');
 const zoomVal = document.getElementById('zoomVal');
 
@@ -1047,6 +1047,14 @@ zoomSlider.addEventListener('input', (e) => {
   const val = e.target.value;
   document.documentElement.style.setProperty('--board-zoom', val);
   zoomVal.textContent = Math.round(val * 100) + '%';
+});
+
+// 手動で「盤面反転 🔄」ボタンを押したときのトグル処理
+document.getElementById('btnFlip').addEventListener('click', () => {
+  const bd = document.getElementById('board');
+  const gc = document.getElementById('gameContainer');
+  bd.classList.toggle('flipped');
+  gc.classList.toggle('flipped');
 });
 
 showModal(document.getElementById('modeModal'));
