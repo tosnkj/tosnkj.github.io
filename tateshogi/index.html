@@ -173,7 +173,13 @@
   }
   .hand-slot.has-piece { cursor: pointer; }
   .hand-slot.has-piece:hover { background: rgba(255,255,255,.06); }
-  .hand-slot.selected { background: var(--gold-highlight-soft); box-shadow: 0 0 0 2px var(--gold-highlight) inset; }
+  
+  /* 【修正箇所】選択された持ち駒を目立たせる */
+  .hand-slot.selected {
+    background: linear-gradient(160deg, #e2b65d, #b98b32);
+    box-shadow: inset 0 0 0 2px var(--wood-line);
+  }
+  
   .hand-slot .komaface {
     width: calc(28px * var(--board-zoom)); 
     height: calc(30px * var(--board-zoom));
@@ -191,6 +197,7 @@
     display: flex; align-items: center; justify-content: center;
     padding: 0 2px;
   }
+  .hand-count.selected-hand { background: var(--wood-line); } /* 選択時は数字の背景を変える */
   .hand-empty-note { font-size: 11px; color: var(--panel-line); }
 
   /* ---------- board ---------- */
@@ -224,7 +231,14 @@
     user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
-  .cell.selected { background: linear-gradient(160deg,#dcb96f,#c49a52); }
+  
+  /* 【修正箇所】選択された盤上のマスを強力に強調 */
+  .cell.selected { 
+    background: linear-gradient(160deg, #e2b65d, #b98b32); 
+    box-shadow: inset 0 0 0 3px var(--gold-highlight), 0 0 8px rgba(201,154,63,0.5);
+    z-index: 2;
+  }
+  
   .cell.legal-empty::after {
     content: "";
     width: 22%; height: 22%;
@@ -250,7 +264,7 @@
   .koma.sente { transform: rotate(0deg); }
   .koma.gote  { transform: rotate(180deg); }
 
-  /* 【修正箇所】盤面反転時の駒の向き制御（手前側の駒が常に上を向くように修正） */
+  /* 盤面反転時の駒の向き制御 */
   .board.flipped .koma.sente { transform: rotate(0deg); }
   .board.flipped .koma.gote  { transform: rotate(180deg); }
 
@@ -836,9 +850,12 @@ function renderHand(owner){
     any = true;
     const slot = document.createElement('div');
     slot.className = 'hand-slot has-piece';
-    if (selected && selected.kind==='hand' && selected.piece===t && turn===owner){
+    
+    const isSelectedHand = (selected && selected.kind==='hand' && selected.piece===t && turn===owner);
+    if (isSelectedHand){
       slot.className += ' selected';
     }
+    
     const koma = document.createElement('div');
     koma.className = 'komaface koma ' + owner; 
     const kanji = document.createElement('span');
@@ -846,10 +863,12 @@ function renderHand(owner){
     kanji.textContent = t === 'G' ? '金' : '歩';
     koma.appendChild(kanji);
     slot.appendChild(koma);
+    
     const count = document.createElement('span');
-    count.className = 'hand-count';
+    count.className = 'hand-count' + (isSelectedHand ? ' selected-hand' : '');
     count.textContent = h[t];
     slot.appendChild(count);
+    
     slot.addEventListener('click', () => handleHandClick(owner, t));
     container.appendChild(slot);
   }
