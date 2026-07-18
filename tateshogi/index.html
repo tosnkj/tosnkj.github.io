@@ -25,6 +25,9 @@
     --muted: #b8ac96;
     --serif: "Hiragino Mincho ProN","Yu Mincho","Noto Serif JP", serif;
     --sans: "Hiragino Kaku Gothic ProN","Yu Gothic Medium","Noto Sans JP", sans-serif;
+    
+    /* ズーム倍率の初期値（JavaScriptから可変にします） */
+    --board-zoom: 1.0; 
   }
 
   * { box-sizing: border-box; }
@@ -41,11 +44,11 @@
   .app {
     max-width: 480px;
     margin: 0 auto;
-    padding: 20px 14px 48px;
+    padding: 10px 14px 48px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
   }
 
   header { text-align: center; margin-bottom: 2px; }
@@ -54,7 +57,7 @@
     font-family: var(--serif);
     font-weight: 700;
     letter-spacing: .08em;
-    font-size: clamp(24px, 7vw, 30px);
+    font-size: clamp(22px, 6vw, 28px);
     margin: 0;
     color: var(--paper);
   }
@@ -62,9 +65,36 @@
 
   .subtitle {
     margin: 4px 0 0;
-    font-size: 12.5px;
+    font-size: 11px;
     letter-spacing: .04em;
     color: var(--muted);
+  }
+
+  /* ズーム操作パネル */
+  .zoom-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--paper);
+    width: 100%;
+    max-width: 300px;
+    justify-content: center;
+  }
+  .zoom-control input[type="range"] {
+    flex: 1;
+    accent-color: var(--gold-highlight);
+    cursor: pointer;
+  }
+  .zoom-val {
+    min-width: 35px;
+    text-align: right;
+    font-weight: bold;
+    color: var(--gold-highlight);
   }
 
   .status-bar {
@@ -75,14 +105,14 @@
     gap: 8px;
     min-height: 34px;
     font-family: var(--serif);
-    font-size: 15px;
+    font-size: 14px;
     letter-spacing: .05em;
   }
   .turn-chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 5px 14px;
+    padding: 4px 12px;
     border-radius: 999px;
     background: var(--panel);
     border: 1px solid var(--panel-line);
@@ -105,12 +135,12 @@
   .hand {
     width: 100%;
     max-width: 300px;
-    min-height: 46px;
+    min-height: 42px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
-    padding: 6px 10px;
+    padding: 4px 10px;
     border-radius: 10px;
     background: var(--panel);
     border: 1px solid var(--panel-line);
@@ -124,7 +154,8 @@
   .hand-pieces { display: flex; gap: 8px; flex: 1; justify-content: center; }
   .hand-slot {
     position: relative;
-    width: 40px; height: 40px;
+    width: calc(36px * var(--board-zoom)); 
+    height: calc(36px * var(--board-zoom));
     display: flex; align-items: center; justify-content: center;
     border-radius: 8px;
     cursor: default;
@@ -134,34 +165,36 @@
   .hand-slot.has-piece:hover { background: rgba(255,255,255,.06); }
   .hand-slot.selected { background: var(--gold-highlight-soft); box-shadow: 0 0 0 2px var(--gold-highlight) inset; }
   .hand-slot .komaface {
-    width: 32px; height: 34px;
+    width: calc(28px * var(--board-zoom)); 
+    height: calc(30px * var(--board-zoom));
   }
   .hand-count {
     position: absolute;
     bottom: -2px; right: -2px;
     background: var(--accent);
     color: #fff;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 700;
-    min-width: 15px;
-    height: 15px;
+    min-width: 14px;
+    height: 14px;
     border-radius: 999px;
     display: flex; align-items: center; justify-content: center;
-    padding: 0 3px;
+    padding: 0 2px;
   }
   .hand-empty-note { font-size: 11px; color: var(--panel-line); }
 
   /* ---------- board ---------- */
   .board-wrap {
-    padding: 10px;
+    padding: 8px;
     border-radius: 10px;
     background: linear-gradient(155deg, var(--wood-1), var(--wood-2) 70%);
     box-shadow: 0 12px 30px rgba(0,0,0,.45), 0 0 0 1px var(--wood-line);
   }
   .board {
     display: grid;
-    grid-template-columns: repeat(3, clamp(58px, 22vw, 84px));
-    grid-template-rows: repeat(9, clamp(58px, 22vw, 84px));
+    /* 元の clamp 計算にズーム倍率を乗算 */
+    grid-template-columns: repeat(3, calc(clamp(48px, 20vw, 75px) * var(--board-zoom)));
+    grid-template-rows: repeat(9, calc(clamp(48px, 18vw, 75px) * var(--board-zoom)));
     gap: 0;
     background: var(--wood-line);
     border: 2px solid var(--wood-line);
@@ -204,12 +237,13 @@
     font-family: var(--serif);
     font-weight: 700;
     color: var(--piece-ink);
-    font-size: clamp(20px, 6.2vw, 28px);
+    /* 文字サイズもズームに合わせて伸縮 */
+    font-size: calc(clamp(18px, 5.5vw, 24px) * var(--board-zoom));
     line-height: 1;
     transform: translateY(2px);
   }
   .koma.promoted .kanji { color: var(--accent); }
-  .koma.is-king .kanji { font-size: clamp(21px, 6.6vw, 30px); }
+  .koma.is-king .kanji { font-size: calc(clamp(19px, 6vw, 26px) * var(--board-zoom)); }
 
   /* ---------- controls / rules ---------- */
   .controls {
@@ -221,7 +255,7 @@
     font-family: var(--sans);
     font-size: 13px;
     letter-spacing: .03em;
-    padding: 9px 16px;
+    padding: 8px 14px;
     border-radius: 8px;
     border: 1px solid var(--panel-line);
     background: var(--panel);
@@ -308,6 +342,14 @@
     <h1>たて<span>しょうぎ</span></h1>
     <p class="subtitle">3列×9段 ・ 王 / 金 / 歩だけで遊ぶミニ将棋</p>
   </header>
+
+  <!-- 画面サイズ変更用のスライダーパネルを追加 -->
+  <div class="zoom-control">
+    <span>画面縮小</span>
+    <input type="range" id="zoomSlider" min="0.8" max="1.2" step="0.05" value="1.0">
+    <span>拡大</span>
+    <span class="zoom-val" id="zoomVal">100%</span>
+  </div>
 
   <div class="status-bar" id="statusBar"></div>
 
@@ -408,7 +450,7 @@
 <script>
 /* =====================================================================
    3x9 mini shogi engine  (King / Gold / Pawn only)
-   ===================================================================== */
+   ==================================================================== */
 const ROWS = 9, COLS = 3;
 
 function makeInitialBoard() {
@@ -574,9 +616,7 @@ function generateAllLegalMoves(b, hands, owner){
 }
 
 /* =====================================================================
-   Simple CPU opponent: material-based evaluation + shallow negamax
-   with alpha-beta pruning. The board is tiny (27 squares, at most
-   12 pieces) so a few plies of full-width search runs instantly.
+   Simple CPU opponent
    ===================================================================== */
 function simulateMove(b, h, owner, move){
   let nb, nh = JSON.parse(JSON.stringify(h));
@@ -658,7 +698,7 @@ function chooseCpuMove(){
   });
   scored.sort((a,c) => c.score - a.score);
   const best = scored[0].score;
-  const EPS = 0.6; // pick randomly among near-equal top moves for variety
+  const EPS = 0.6;
   const top = scored.filter(s => s.score >= best - EPS);
   return top[Math.floor(Math.random()*top.length)].m;
 }
@@ -695,7 +735,7 @@ function scheduleCpuMoveIfNeeded(){
   renderAll();
   const myGameId = gameId;
   setTimeout(() => {
-    if (myGameId !== gameId) return; // a new game started meanwhile; discard
+    if (myGameId !== gameId) return;
     const move = chooseCpuMove();
     cpuThinking = false;
     if (move) finalizeMove(move);
@@ -962,6 +1002,17 @@ document.getElementById('sideGote').addEventListener('click', () => {
   cpuSide = 'sente';
   hideModal(document.getElementById('sideModal'));
   newGame();
+});
+
+/* --- ズーム機能のイベントリスナーを追加 --- */
+const zoomSlider = document.getElementById('zoomSlider');
+const zoomVal = document.getElementById('zoomVal');
+
+zoomSlider.addEventListener('input', (e) => {
+  const val = e.target.value;
+  // CSSのカスタム変数（--board-zoom）を書き換えて一括変化
+  document.documentElement.style.setProperty('--board-zoom', val);
+  zoomVal.textContent = Math.round(val * 100) + '%';
 });
 
 /* On first load, ask the player which mode to play before starting. */
