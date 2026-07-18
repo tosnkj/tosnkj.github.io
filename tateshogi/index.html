@@ -174,10 +174,10 @@
   .hand-slot.has-piece { cursor: pointer; }
   .hand-slot.has-piece:hover { background: rgba(255,255,255,.06); }
   
-  /* 【修正箇所】選択された持ち駒を目立たせる */
+  /* 【修正箇所】選択された持ち駒を薄い青（水色）にする */
   .hand-slot.selected {
-    background: linear-gradient(160deg, #e2b65d, #b98b32);
-    box-shadow: inset 0 0 0 2px var(--wood-line);
+    background: linear-gradient(160deg, #b3e5fc, #81d4fa);
+    box-shadow: inset 0 0 0 2px #29b6f6;
   }
   
   .hand-slot .komaface {
@@ -197,7 +197,7 @@
     display: flex; align-items: center; justify-content: center;
     padding: 0 2px;
   }
-  .hand-count.selected-hand { background: var(--wood-line); } /* 選択時は数字の背景を変える */
+  .hand-count.selected-hand { background: #0288d1; } /* 選択時は数字の背景も濃い青系に */
   .hand-empty-note { font-size: 11px; color: var(--panel-line); }
 
   /* ---------- board ---------- */
@@ -232,10 +232,10 @@
     -webkit-tap-highlight-color: transparent;
   }
   
-  /* 【修正箇所】選択された盤上のマスを強力に強調 */
+  /* 【修正箇所】選択された盤上のマスを「薄い青」で強力に目立たせる */
   .cell.selected { 
-    background: linear-gradient(160deg, #e2b65d, #b98b32); 
-    box-shadow: inset 0 0 0 3px var(--gold-highlight), 0 0 8px rgba(201,154,63,0.5);
+    background: linear-gradient(160deg, #b3e5fc, #81d4fa); 
+    box-shadow: inset 0 0 0 3px #29b6f6, 0 0 8px rgba(41, 182, 246, 0.6);
     z-index: 2;
   }
   
