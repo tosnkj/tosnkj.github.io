@@ -258,17 +258,18 @@
     transition: transform 0.3s ease;
   }
   
-  /* 【修正・追加箇所】反転時の状態を網羅して駒の向きを制御 */
   .koma.sente { transform: rotate(0deg); }
   .koma.gote  { transform: rotate(180deg); }
 
-  /* 盤面反転時の盤上の駒の向き */
-  .board.flipped .koma.sente { transform: rotate(180deg); }
-  .board.flipped .koma.gote  { transform: rotate(0deg); }
+  /* 盤上の駒は .board 自体の rotate(180deg) が親要素の回転として
+     自動的に加算されるため、盤上の駒には個別の補正は不要
+     （先手: 0deg+180deg=180deg、後手: 180deg+180deg=0degとなり、
+      位置の反転と向きの反転が自然に一致する） */
 
-  /* 盤面反転時の持ち駒エリアの駒の向き */
-  .game-container.flipped #handSente .koma.sente { transform: rotate(180deg); }
-  .game-container.flipped #handGote .koma.gote   { transform: rotate(0deg); }
+  /* 盤面反転時の「持ち駒」の向き補正（持ち駒は .board の外にあり
+     親の回転を受けないため、こちらは個別に補正が必要） */
+  .game-container.flipped #handSente .koma.sente { transform: rotate(180deg) !important; }
+  .game-container.flipped #handGote .koma.gote   { transform: rotate(0deg) !important; }
 
   .koma .kanji {
     font-family: var(--serif);
@@ -491,9 +492,6 @@
 </div>
 
 <script>
-/* =====================================================================
-   3x9 mini shogi engine  (King / Gold / Pawn only)
-   ===================================================================== */
 const ROWS = 9, COLS = 3;
 
 function makeInitialBoard() {
@@ -658,9 +656,6 @@ function generateAllLegalMoves(b, hands, owner){
   return legal;
 }
 
-/* =====================================================================
-   Simple CPU opponent
-   ===================================================================== */
 function simulateMove(b, h, owner, move){
   let nb, nh = JSON.parse(JSON.stringify(h));
   if (move.type === 'move'){
@@ -746,9 +741,6 @@ function chooseCpuMove(){
   return top[Math.floor(Math.random()*top.length)].m;
 }
 
-/* =====================================================================
-   UI state & rendering
-   ===================================================================== */
 let board, hands, turn, selected, legalMoves, gameOver, pendingChoices;
 let gameMode = null;      
 let humanSide = 'sente';  
@@ -922,8 +914,6 @@ function renderBoard(){
   }
 }
 
-/* ---------------------- interaction ---------------------- */
-
 function handleCellClick(r, c){
   if (gameOver || pendingChoices || cpuThinking) return;
   if (gameMode === 'cpu' && turn === cpuSide) return;
@@ -991,8 +981,6 @@ function finalizeMove(move){
   renderAll();
   scheduleCpuMoveIfNeeded();
 }
-
-/* ---------------------- modals ---------------------- */
 
 function showModal(el){ el.hidden = false; }
 function hideModal(el){ el.hidden = true; }
