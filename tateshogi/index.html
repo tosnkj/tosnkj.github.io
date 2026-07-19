@@ -174,7 +174,6 @@
   .hand-slot.has-piece { cursor: pointer; }
   .hand-slot.has-piece:hover { background: rgba(255,255,255,.06); }
   
-  /* 【修正箇所】選択された持ち駒を薄い青（水色）にする */
   .hand-slot.selected {
     background: linear-gradient(160deg, #b3e5fc, #81d4fa);
     box-shadow: inset 0 0 0 2px #29b6f6;
@@ -197,7 +196,7 @@
     display: flex; align-items: center; justify-content: center;
     padding: 0 2px;
   }
-  .hand-count.selected-hand { background: #0288d1; } /* 選択時は数字の背景も濃い青系に */
+  .hand-count.selected-hand { background: #0288d1; }
   .hand-empty-note { font-size: 11px; color: var(--panel-line); }
 
   /* ---------- board ---------- */
@@ -217,7 +216,6 @@
     transition: transform 0.3s ease;
   }
   
-  /* ボタン押下で手動反転させるクラス */
   .board.flipped {
     transform: rotate(180deg);
   }
@@ -232,7 +230,6 @@
     -webkit-tap-highlight-color: transparent;
   }
   
-  /* 【修正箇所】選択された盤上のマスを「薄い青」で強力に目立たせる */
   .cell.selected { 
     background: linear-gradient(160deg, #b3e5fc, #81d4fa); 
     box-shadow: inset 0 0 0 3px #29b6f6, 0 0 8px rgba(41, 182, 246, 0.6);
@@ -261,12 +258,17 @@
     transition: transform 0.3s ease;
   }
   
+  /* 【修正・追加箇所】反転時の状態を網羅して駒の向きを制御 */
   .koma.sente { transform: rotate(0deg); }
   .koma.gote  { transform: rotate(180deg); }
 
-  /* 盤面反転時の駒の向き制御 */
-  .board.flipped .koma.sente { transform: rotate(0deg); }
-  .board.flipped .koma.gote  { transform: rotate(180deg); }
+  /* 盤面反転時の盤上の駒の向き */
+  .board.flipped .koma.sente { transform: rotate(180deg); }
+  .board.flipped .koma.gote  { transform: rotate(0deg); }
+
+  /* 盤面反転時の持ち駒エリアの駒の向き */
+  .game-container.flipped #handSente .koma.sente { transform: rotate(180deg); }
+  .game-container.flipped #handGote .koma.gote   { transform: rotate(0deg); }
 
   .koma .kanji {
     font-family: var(--serif);
@@ -648,7 +650,7 @@ function generateAllLegalMoves(b, hands, owner){
         const handsAfter = JSON.parse(JSON.stringify(hands));
         handsAfter[owner].P -= 1;
         const oppMoves = generateAllLegalMoves(nb, handsAfter, opponent(owner));
-        if (oppMoves.length === 0) continue; // uchifuzume
+        if (oppMoves.length === 0) continue; 
       }
     }
     legal.push({type:'drop', piece:d.piece, to:d.to});
@@ -748,8 +750,8 @@ function chooseCpuMove(){
    UI state & rendering
    ===================================================================== */
 let board, hands, turn, selected, legalMoves, gameOver, pendingChoices;
-let gameMode = null;      // 'pvp' | 'cpu'
-let humanSide = 'sente';  // used when gameMode === 'cpu'
+let gameMode = null;      
+let humanSide = 'sente';  
 let cpuSide = 'gote';
 let cpuThinking = false;
 let gameId = 0;
