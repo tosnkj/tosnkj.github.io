@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chord Chain - Ad Lib 練習アプリ</title>
+
+<!-- PWA対応: ホーム画面に追加したときにアプリらしく振る舞うための設定 -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111214">
+
+<!-- iOS(Safari)向けのアプリ化設定 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Chord Chain">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+<!-- 通常ブラウザ向けのファビコン -->
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <style>
   :root{
     --bg:#111214;
